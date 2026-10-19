@@ -14,15 +14,22 @@ export default function App() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
- const firebaseConfig = {
-  apiKey: "AIzaSyCOMsddUqKS5_z3tArY2i-D6sK2kp64j04",
-  authDomain: "footpro-c8971.firebaseapp.com",
-  projectId: "footpro-c8971",
-  storageBucket: "footpro-c8971.firebasestorage.app",
-  messagingSenderId: "138177969965",
-  appId: "1:138177969965:web:870e657dd58f6837171da4",
-  measurementId: "G-NCW64TYQ99"
-};
+  const fetchData = async () => {
+    try {
+      const teamsSnapshot = await getDocs(collection(db, "teams"));
+      const teamsList = teamsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTeams(teamsList);
+
+      const matchesSnapshot = await getDocs(collection(db, "matches"));
+      const matchesList = matchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMatches(matchesList);
+      
+      setLoading(false);
+    } catch (error) {
+      console.error("خطأ في جلب البيانات:", error);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
