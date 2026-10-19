@@ -193,13 +193,14 @@ export default function FootballTournamentApp()
   };
 
  // دالة تسجيل النتيجة وحساب النقاط والأهداف أوتوماتيكياً للفرقتين
-  const handleUpdateScore = async (match, hScore, aScore) => {
-    if (hScore === '' || aScore === '' || isNaN(hScore) || isNaN(aScore)) {
-      alert("المرجو إدخال أرقام صحيحة للنتيجة!");
-      return;
-    }
+ const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
+
+    if (isNaN(hs) || isNaN(as)) {
+      alert("المرجو إدخال أرقام صحيحة وصالحة في خانة النتيجة!");
+      return;
+    }
 
     try {
       // 1. تحديث النتيجة في جدول المباريات
@@ -210,9 +211,9 @@ export default function FootballTournamentApp()
         status: 'انتهت'
       });
 
-      // 2. حساب وتحديث إحصائيات الفريق المضيف والفريق الضيف أوتوماتيكياً
-      const homeTeamObj = teams.find(t => t.name === match.home);
-      const awayTeamObj = teams.find(t => t.name === match.away);
+      // 2. البحث عن الفرق بدقة وتحديث الإحصائيات أوتوماتيكياً
+      const homeTeamObj = teams.find(t => t.name.trim() === match.home.trim());
+      const awayTeamObj = teams.find(t => t.name.trim() === match.away.trim());
 
       if (homeTeamObj && awayTeamObj) {
         let homeWin = hs > as ? 1 : 0;
@@ -222,36 +223,37 @@ export default function FootballTournamentApp()
 
         let awayWin = as > hs ? 1 : 0;
         let awayDraw = hs === as ? 1 : 0;
-        let awayLoss = as > hs ? 1 : 0;
+        let awayLoss = as < hs ? 1 : 0;
         let awayPts = awayWin * 3 + awayDraw * 1;
 
         // تحديث المضيف
         await updateDoc(doc(db, "teams", homeTeamObj.id), {
-          p: (homeTeamObj.p || 0) + 1,
-          w: (homeTeamObj.w || 0) + homeWin,
-          d: (homeTeamObj.d || 0) + homeDraw,
-          l: (homeTeamObj.l || 0) + homeLoss,
-          gf: (homeTeamObj.gf || 0) + hs,
-          ga: (homeTeamObj.ga || 0) + as,
-          pts: (homeTeamObj.pts || 0) + homePts
+          p: (Number(homeTeamObj.p) || 0) + 1,
+          w: (Number(homeTeamObj.w) || 0) + homeWin,
+          d: (Number(homeTeamObj.d) || 0) + homeDraw,
+          l: (Number(homeTeamObj.l) || 0) + homeLoss,
+          gf: (Number(homeTeamObj.gf) || 0) + hs,
+          ga: (Number(homeTeamObj.ga) || 0) + as,
+          pts: (Number(homeTeamObj.pts) || 0) + homePts
         });
 
         // تحديث الضيف
         await updateDoc(doc(db, "teams", awayTeamObj.id), {
-          p: (awayTeamObj.p || 0) + 1,
-          w: (awayTeamObj.w || 0) + awayWin,
-          d: (awayTeamObj.d || 0) + awayDraw,
-          l: (awayTeamObj.l || 0) + awayLoss,
-          gf: (awayTeamObj.gf || 0) + as,
-          ga: (awayTeamObj.ga || 0) + hs,
-          pts: (awayTeamObj.pts || 0) + awayPts
+          p: (Number(awayTeamObj.p) || 0) + 1,
+          w: (Number(awayTeamObj.w) || 0) + awayWin,
+          d: (Number(awayTeamObj.d) || 0) + awayDraw,
+          l: (Number(awayTeamObj.l) || 0) + awayLoss,
+          gf: (Number(awayTeamObj.gf) || 0) + as,
+          ga: (Number(awayTeamObj.ga) || 0) + hs,
+          pts: (Number(awayTeamObj.pts) || 0) + awayPts
         });
       }
 
       fetchData();
-      alert("تم تسجيل النتيجة وتحديث الأهداف والترتيب أوتوماتيكياً بنجاح!");
+      alert("تم تسجيل النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! ⚽");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
+      alert("حدث خطأ أثناء التحديث.");
     }
   };
 
