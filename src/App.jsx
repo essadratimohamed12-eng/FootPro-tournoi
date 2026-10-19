@@ -7,14 +7,13 @@ import {
   deleteDoc, 
   doc 
 } from 'firebase/firestore';
-import { db } from './firebase'; // تأكد من مسار ملف الفايربيز عندك
+import { db } from './firebase';
 
 export default function App() {
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // جلب البيانات من فايربيز
  const firebaseConfig = {
   apiKey: "AIzaSyCOMsddUqKS5_z3tArY2i-D6sK2kp64j04",
   authDomain: "footpro-c8971.firebaseapp.com",
@@ -29,7 +28,6 @@ export default function App() {
     fetchData();
   }, []);
 
-  // دالة تحديث النتيجة وحساب الترتيب أوتوماتيكياً
   const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
