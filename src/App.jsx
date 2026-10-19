@@ -193,8 +193,7 @@ export default function FootballTournamentApp()
   };
 
  // دالة تسجيل النتيجة وحساب النقاط والأهداف أوتوماتيكياً للفرقتين
- const handleUpdateScore = async (match, hScore, aScore) => {
-    // التأكد من أن القيم المدخلة أرقام صحيحة وليست فارغة
+const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
 
@@ -204,7 +203,6 @@ export default function FootballTournamentApp()
     }
 
     try {
-      // 1. تحديث النتيجة وحالة المباراة في قاعدة البيانات
       const matchRef = doc(db, "matches", match.id);
       await updateDoc(matchRef, {
         homeScore: hs,
@@ -212,7 +210,6 @@ export default function FootballTournamentApp()
         status: 'انتهت'
       });
 
-      // 2. جلب وتحديث إحصائيات الفريقين (النقاط، الأهداف، الفوز، الخسارة)
       const homeTeamObj = teams.find(t => t.name.trim() === match.home.trim());
       const awayTeamObj = teams.find(t => t.name.trim() === match.away.trim());
 
@@ -227,7 +224,6 @@ export default function FootballTournamentApp()
         let awayLoss = as < hs ? 1 : 0;
         let awayPts = awayWin * 3 + awayDraw * 1;
 
-        // تحديث الفريق المضيف
         await updateDoc(doc(db, "teams", homeTeamObj.id), {
           p: (Number(homeTeamObj.p) || 0) + 1,
           w: (Number(homeTeamObj.w) || 0) + homeWin,
@@ -238,7 +234,6 @@ export default function FootballTournamentApp()
           pts: (Number(homeTeamObj.pts) || 0) + homePts
         });
 
-        // تحديث الفريق الضيف
         await updateDoc(doc(db, "teams", awayTeamObj.id), {
           p: (Number(awayTeamObj.p) || 0) + 1,
           w: (Number(awayTeamObj.w) || 0) + awayWin,
@@ -255,17 +250,6 @@ export default function FootballTournamentApp()
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
       alert("حدث خطأ أثناء حفظ النتيجة.");
-    }
-  };
-
-  const handleDeleteMatch = async (id) => {
-    if (window.confirm("هل أنت متأكد من حذف هذه المباراة؟")) {
-      try {
-        await deleteDoc(doc(db, "matches", id));
-        fetchData();
-      } catch (error) {
-        console.error("خطأ في الحذف:", error);
-      }
     }
   };
 
