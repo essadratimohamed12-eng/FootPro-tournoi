@@ -15,7 +15,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-export default function FootballTournamentApp() {
+export default function FootballTournamentApp() 
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [activeTab, setActiveTab] = useState('standings');
@@ -192,6 +192,7 @@ export default function FootballTournamentApp() {
     }
   };
 
+ // دالة تسجيل النتيجة وحساب النقاط والأهداف أوتوماتيكياً للفرقتين
   const handleUpdateScore = async (match, hScore, aScore) => {
     if (hScore === '' || aScore === '' || isNaN(hScore) || isNaN(aScore)) {
       alert("المرجو إدخال أرقام صحيحة للنتيجة!");
@@ -201,14 +202,54 @@ export default function FootballTournamentApp() {
     const as = parseInt(aScore);
 
     try {
+      // 1. تحديث النتيجة في جدول المباريات
       const matchRef = doc(db, "matches", match.id);
       await updateDoc(matchRef, {
         homeScore: hs,
         awayScore: as,
         status: 'انتهت'
       });
+
+      // 2. حساب وتحديث إحصائيات الفريق المضيف والفريق الضيف أوتوماتيكياً
+      const homeTeamObj = teams.find(t => t.name === match.home);
+      const awayTeamObj = teams.find(t => t.name === match.away);
+
+      if (homeTeamObj && awayTeamObj) {
+        let homeWin = hs > as ? 1 : 0;
+        let homeDraw = hs === as ? 1 : 0;
+        let homeLoss = hs < as ? 1 : 0;
+        let homePts = homeWin * 3 + homeDraw * 1;
+
+        let awayWin = as > hs ? 1 : 0;
+        let awayDraw = hs === as ? 1 : 0;
+        let awayLoss = as > hs ? 1 : 0;
+        let awayPts = awayWin * 3 + awayDraw * 1;
+
+        // تحديث المضيف
+        await updateDoc(doc(db, "teams", homeTeamObj.id), {
+          p: (homeTeamObj.p || 0) + 1,
+          w: (homeTeamObj.w || 0) + homeWin,
+          d: (homeTeamObj.d || 0) + homeDraw,
+          l: (homeTeamObj.l || 0) + homeLoss,
+          gf: (homeTeamObj.gf || 0) + hs,
+          ga: (homeTeamObj.ga || 0) + as,
+          pts: (homeTeamObj.pts || 0) + homePts
+        });
+
+        // تحديث الضيف
+        await updateDoc(doc(db, "teams", awayTeamObj.id), {
+          p: (awayTeamObj.p || 0) + 1,
+          w: (awayTeamObj.w || 0) + awayWin,
+          d: (awayTeamObj.d || 0) + awayDraw,
+          l: (awayTeamObj.l || 0) + awayLoss,
+          gf: (awayTeamObj.gf || 0) + as,
+          ga: (awayTeamObj.ga || 0) + hs,
+          pts: (awayTeamObj.pts || 0) + awayPts
+        });
+      }
+
       fetchData();
-      alert("تم تسجيل النتيجة بنجاح!");
+      alert("تم تسجيل النتيجة وتحديث الأهداف والترتيب أوتوماتيكياً بنجاح!");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
     }
