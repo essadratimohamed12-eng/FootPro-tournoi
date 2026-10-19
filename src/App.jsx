@@ -194,16 +194,17 @@ export default function FootballTournamentApp()
 
  // دالة تسجيل النتيجة وحساب النقاط والأهداف أوتوماتيكياً للفرقتين
  const handleUpdateScore = async (match, hScore, aScore) => {
+    // التأكد من أن القيم المدخلة أرقام صحيحة وليست فارغة
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
 
     if (isNaN(hs) || isNaN(as)) {
-      alert("المرجو إدخال أرقام صحيحة وصالحة في خانة النتيجة!");
+      alert("المرجو إدخال أرقام صحيحة في نتيجة الفريقين!");
       return;
     }
 
     try {
-      // 1. تحديث النتيجة في جدول المباريات
+      // 1. تحديث النتيجة وحالة المباراة في قاعدة البيانات
       const matchRef = doc(db, "matches", match.id);
       await updateDoc(matchRef, {
         homeScore: hs,
@@ -211,7 +212,7 @@ export default function FootballTournamentApp()
         status: 'انتهت'
       });
 
-      // 2. البحث عن الفرق بدقة وتحديث الإحصائيات أوتوماتيكياً
+      // 2. جلب وتحديث إحصائيات الفريقين (النقاط، الأهداف، الفوز، الخسارة)
       const homeTeamObj = teams.find(t => t.name.trim() === match.home.trim());
       const awayTeamObj = teams.find(t => t.name.trim() === match.away.trim());
 
@@ -226,7 +227,7 @@ export default function FootballTournamentApp()
         let awayLoss = as < hs ? 1 : 0;
         let awayPts = awayWin * 3 + awayDraw * 1;
 
-        // تحديث المضيف
+        // تحديث الفريق المضيف
         await updateDoc(doc(db, "teams", homeTeamObj.id), {
           p: (Number(homeTeamObj.p) || 0) + 1,
           w: (Number(homeTeamObj.w) || 0) + homeWin,
@@ -237,7 +238,7 @@ export default function FootballTournamentApp()
           pts: (Number(homeTeamObj.pts) || 0) + homePts
         });
 
-        // تحديث الضيف
+        // تحديث الفريق الضيف
         await updateDoc(doc(db, "teams", awayTeamObj.id), {
           p: (Number(awayTeamObj.p) || 0) + 1,
           w: (Number(awayTeamObj.w) || 0) + awayWin,
@@ -249,11 +250,11 @@ export default function FootballTournamentApp()
         });
       }
 
-      fetchData();
-      alert("تم تسجيل النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! ⚽");
+      await fetchData();
+      alert("تم تسجيل النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! 🏆");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
-      alert("حدث خطأ أثناء التحديث.");
+      alert("حدث خطأ أثناء حفظ النتيجة.");
     }
   };
 
