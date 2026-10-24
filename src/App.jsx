@@ -33,8 +33,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamGroup, setNewTeamGroup] = useState('GROUPE A');
+  const [newTeamGroup, setNewTeamGroup] = useState('المجموعة أ');
   const [newTeamLogo, setNewTeamLogo] = useState('');
+
+  const [homeTeam, setHomeTeam] = useState('');
+  const [awayTeam, setAwayTeam] = useState('');
 
   const fetchData = async () => {
     try {
@@ -85,6 +88,31 @@ export default function App() {
         setNewTeamLogo(reader.result);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddMatch = async (e) => {
+    e.preventDefault();
+    if (!homeTeam || !awayTeam || homeTeam === awayTeam) {
+      alert("المرجو اختيار فريقين مختلفين للمباراة!");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "matches"), {
+        home: homeTeam,
+        away: awayTeam,
+        journee: phase1Tab,
+        homeScore: null,
+        awayScore: null,
+        status: 'قيد الانتظار'
+      });
+      setHomeTeam('');
+      setAwayTeam('');
+      fetchData();
+      alert("تمت إضافة المباراة بنجاح إلى الجولة!");
+    } catch (err) {
+      console.error("خطأ في إضافة المباراة:", err);
     }
   };
 
@@ -232,7 +260,7 @@ export default function App() {
     );
   }
 
-  const groupNames = ['GROUPE A', 'GROUPE B', 'GROUPE C', 'GROUPE D'];
+  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif', paddingBottom: '40px' }}>
@@ -260,33 +288,39 @@ export default function App() {
       {currentView === 'menu' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 1
-          </div>
-
-          <div 
-            onClick={() => setCurrentView('infos')}
-            style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
-          >
-            <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏆</div>
-            <div>
-              <div style={{ fontWeight: 'bold', fontSize: '14px' }}>INFOS SUR LE TOURNOI</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات ونظام البطولة وكلمات المرور</div>
-            </div>
-          </div>
-
           {role === 'admin' && (
-            <div 
-              onClick={() => setCurrentView('participants')}
-              style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
-            >
-              <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>👥</div>
-              <div>
-                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>PARTICIPANTS</div>
-                <div style={{ fontSize: '12px', color: '#94a3b8' }}>إضافة وتعديل الفرق وشعاراتها من الهاتف</div>
+            <>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
+                لوحة تحكم المشرف (Admin Controls)
               </div>
-            </div>
+
+              <div 
+                onClick={() => setCurrentView('infos')}
+                style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
+              >
+                <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏆</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>INFOS SUR LE TOURNOI</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات ونظام البطولة وكلمات المرور</div>
+                </div>
+              </div>
+
+              <div 
+                onClick={() => setCurrentView('participants')}
+                style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
+              >
+                <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>👥</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>PARTICIPANTS</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إضافة وتعديل الفرق وشعاراتها من الهاتف</div>
+                </div>
+              </div>
+            </>
           )}
+
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
+            Phase 1 (دور المجموعات والجولات)
+          </div>
 
           {tournamentSystem !== 'knockout_only' && (
             <>
@@ -297,7 +331,7 @@ export default function App() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (المباريات حسب الجولات)</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>Journée 1, 2, 3 وتحديث النتائج أوتوماتيكياً</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض وجدولة مباريات Journée 1, 2, 3</div>
                 </div>
               </div>
 
@@ -308,7 +342,7 @@ export default function App() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات منفصلة بمعايير دقيقة</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات المنفصلة</div>
                 </div>
               </div>
             </>
@@ -332,7 +366,7 @@ export default function App() {
         </div>
       )}
 
-      {currentView === 'infos' && (
+      {currentView === 'infos' && role === 'admin' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
             <h2 style={{ fontSize: '16px', color: '#38bdf8', marginBottom: '15px' }}>إعدادات ونظام البطولة</h2>
@@ -343,7 +377,6 @@ export default function App() {
                 type="text" 
                 value={tournamentName} 
                 onChange={(e) => setTournamentName(e.target.value)}
-                disabled={role !== 'admin'}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               />
             </div>
@@ -356,7 +389,6 @@ export default function App() {
                   setTournamentSystem(e.target.value);
                   localStorage.setItem('tourney_sys', e.target.value);
                 }}
-                disabled={role !== 'admin'}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               >
                 <option value="groups_knockout">دور المجموعات ثم أدوار إقصائية</option>
@@ -374,7 +406,6 @@ export default function App() {
                   setMatchLegs(e.target.value);
                   localStorage.setItem('match_legs', e.target.value);
                 }}
-                disabled={role !== 'admin'}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               >
                 <option value="single">مباراة واحدة (Match unique)</option>
@@ -382,27 +413,23 @@ export default function App() {
               </select>
             </div>
 
-            {role === 'admin' && (
-              <>
-                <div style={{ borderTop: '1px solid #334155', paddingTop: '15px', marginTop: '15px' }}>
-                  <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر</h3>
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                    <input type="password" placeholder="مرور المشرف الجديد" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
-                    <button onClick={() => { localStorage.setItem('admin_pass', newAdminPass); setAdminPassword(newAdminPass); alert('تم تحديث كلمة سر المشرف'); }} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <input type="password" placeholder="مرور المشاهد الجديد" value={newViewerPass} onChange={(e) => setNewViewerPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
-                    <button onClick={() => { localStorage.setItem('viewer_pass', newViewerPass); setViewerPassword(newViewerPass); alert('تم تحديث كلمة سر المشاهد'); }} style={{ background: '#64748b', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
-                  </div>
-                </div>
+            <div style={{ borderTop: '1px solid #334155', paddingTop: '15px', marginTop: '15px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر</h3>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <input type="password" placeholder="مرور المشرف الجديد" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
+                <button onClick={() => { localStorage.setItem('admin_pass', newAdminPass); setAdminPassword(newAdminPass); alert('تم تحديث كلمة سر المشرف'); }} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input type="password" placeholder="مرور المشاهد الجديد" value={newViewerPass} onChange={(e) => setNewViewerPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
+                <button onClick={() => { localStorage.setItem('viewer_pass', newViewerPass); setViewerPassword(newViewerPass); alert('تم تحديث كلمة سر المشاهد'); }} style={{ background: '#64748b', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
+              </div>
+            </div>
 
-                <div style={{ borderTop: '1px solid #334155', paddingTop: '20px', marginTop: '20px' }}>
-                  <button onClick={handleResetTournament} style={{ width: '100%', background: '#ef4444', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    🗑️ مسح وإعادة تعيين البطولة بالكامل
-                  </button>
-                </div>
-              </>
-            )}
+            <div style={{ borderTop: '1px solid #334155', paddingTop: '20px', marginTop: '20px' }}>
+              <button onClick={handleResetTournament} style={{ width: '100%', background: '#ef4444', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                🗑️ مسح وإعادة تعيين البطولة بالكامل
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -468,12 +495,29 @@ export default function App() {
           <div style={{ padding: '15px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '15px', margin: '10px 0', color: '#38bdf8' }}>مباريات {phase1Tab}</div>
             
-            {matches.length === 0 ? (
+            {role === 'admin' && (
+              <form onSubmit={handleAddMatch} style={{ background: '#1e293b', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
+                <h3 style={{ fontSize: '13px', color: '#34d399', marginBottom: '10px' }}>➕ برمجة مباراة جديدة في {phase1Tab}</h3>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                  <select value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
+                    <option value="">اختر الفريق المضيف</option>
+                    {teams.map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                  </select>
+                  <select value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
+                    <option value="">اختر الفريق الضيف</option>
+                    {teams.map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                  </select>
+                </div>
+                <button type="submit" style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>إضافة المباراة للجولة</button>
+              </form>
+            )}
+
+            {matches.filter(m => m.journee === phase1Tab).length === 0 ? (
               <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                لا توجد مباريات مضافة حالياً.
+                لا توجد مباريات مبرمجة في {phase1Tab} حالياً.
               </div>
             ) : (
-              matches.map((match) => (
+              matches.filter(m => m.journee === phase1Tab).map((match) => (
                 <div key={match.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #334155', textAlign: 'center' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <span style={{ flex: 1, fontWeight: 'bold' }}>{match.home}</span>
@@ -518,47 +562,53 @@ export default function App() {
 
       {currentView === 'phase1_classement' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
-          {groupNames.map(group => {
-            const groupTeams = teams.filter(t => t.group === group);
-            if (groupTeams.length === 0) return null;
+          {teams.length === 0 ? (
+            <div style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', border: '1px solid #334155' }}>
+              لا توجد فرق مسجلة في البطولة حالياً لعرض الترتيب. قم بإضافة الفرق أولاً من قسم المشاركين.
+            </div>
+          ) : (
+            groupNames.map(group => {
+              const groupTeams = teams.filter(t => t.group === group);
+              if (groupTeams.length === 0) return null;
 
-            const sortedTeams = sortGroupTeams([...groupTeams]);
+              const sortedTeams = sortGroupTeams([...groupTeams]);
 
-            return (
-              <div key={group} style={{ background: '#1e293b', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #334155' }}>
-                <h3 style={{ fontSize: '15px', color: '#38bdf8', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>{group}</h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ background: '#0f172a', textAlign: 'center' }}>
-                      <th style={{ padding: '8px', textAlign: 'right' }}>الفريق</th>
-                      <th>لعب</th>
-                      <th>الفرق</th>
-                      <th>نقاط</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTeams.map(t => {
-                      const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
-                      const diffColor = goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff';
-                      return (
-                        <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
-                          <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
-                            {t.name}
-                          </td>
-                          <td>{t.p || 0}</td>
-                          <td style={{ color: diffColor }}>
-                            {goalDiff > 0 ? '+' + goalDiff : goalDiff}
-                          </td>
-                          <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{t.pts || 0}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
+              return (
+                <div key={group} style={{ background: '#1e293b', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #334155' }}>
+                  <h3 style={{ fontSize: '15px', color: '#38bdf8', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>{group}</h3>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: '#0f172a', textAlign: 'center' }}>
+                        <th style={{ padding: '8px', textAlign: 'right' }}>الفريق</th>
+                        <th>لعب</th>
+                        <th>الفرق</th>
+                        <th>نقاط</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedTeams.map(t => {
+                        const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
+                        const diffColor = goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff';
+                        return (
+                          <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
+                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
+                              {t.name}
+                            </td>
+                            <td>{t.p || 0}</td>
+                            <td style={{ color: diffColor }}>
+                              {goalDiff > 0 ? '+' + goalDiff : goalDiff}
+                            </td>
+                            <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{t.pts || 0}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 
@@ -580,10 +630,10 @@ export default function App() {
             {phase2Tab === 'Quarts de finale' && (
               <>
                 {[
-                  { home: 'البرازيل (متصدر أ)', away: 'بلجيكا (وصيف ب)' },
-                  { home: 'المغرب (متصدر ب)', away: 'النرويج (ثالث أفضل)' },
-                  { home: 'الأوروغواي (متصدر ج)', away: 'البرتغال (وصيف أ)' },
-                  { home: 'الأرجنتين (متصدر د)', away: 'اسبانيا (وصيف ج)' }
+                  { home: 'متصدر المجموعة أ', away: 'وصيف المجموعة ب' },
+                  { home: 'متصدر المجموعة ب', away: 'أفضل ثالث' },
+                  { home: 'متصدر المجموعة ج', away: 'وصيف المجموعة أ' },
+                  { home: 'متصدر المجموعة د', away: 'وصيف المجموعة ج' }
                 ].map((m, idx) => (
                   <div key={idx} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -591,7 +641,7 @@ export default function App() {
                       <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>- : -</div>
                       <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away}</span>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#34d399' }}>✨ دور ربع النهائي منظم ومنفصل عن المجموعات</div>
+                    <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم بمعزل عن دور المجموعات</div>
                   </div>
                 ))}
               </>
