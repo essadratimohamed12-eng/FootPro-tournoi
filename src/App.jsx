@@ -39,6 +39,15 @@ export default function App() {
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
 
+  // حالة تعديل الفريق مباشرة من جدول الترتيب
+  const [editingTeamId, setEditingTeamId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editGroup, setEditGroup] = useState('');
+  const [editPts, setEditPts] = useState(0);
+  const [editP, setEditP] = useState(0);
+  const [editGf, setEditGf] = useState(0);
+  const [editGa, setEditGa] = useState(0);
+
   const fetchData = async () => {
     try {
       const teamsSnapshot = await getDocs(collection(db, "teams"));
@@ -120,7 +129,6 @@ export default function App() {
     if (window.confirm("⚠️ هل أنت متأكد من حذف هذه المباراة؟")) {
       try {
         await deleteDoc(doc(db, "matches", matchId));
-        // إعادة حساب الترتيب بعد الحذف
         await recalculateAllStats();
         fetchData();
         alert("تم حذف المباراة بنجاح وتحديث الترتيب!");
@@ -130,7 +138,6 @@ export default function App() {
     }
   };
 
-  // نظام إعادة حساب الترتيب بدقة تامة من جميع المباريات المنتهية لتجنب أي أخطاء تراكمية
   const recalculateAllStats = async () => {
     try {
       const teamsSnapshot = await getDocs(collection(db, "teams"));
@@ -207,12 +214,42 @@ export default function App() {
         status: 'انتهت'
       });
 
-      // إعادة حساب كافة إحصائيات الفرق من الصفر لضمان دقة 100%
       await recalculateAllStats();
       await fetchData();
       alert("تم تعديل وحفظ النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! 🏆");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
+    }
+  };
+
+  // بدء التعديل اليدوي للفريق من جدول الترتيب
+  const startEditingTeam = (team) => {
+    setEditingTeamId(team.id);
+    setEditName(team.name || '');
+    setEditGroup(team.group || 'المجموعة أ');
+    setEditPts(team.pts || 0);
+    setEditP(team.p || 0);
+    setEditGf(team.gf || 0);
+    setEditGa(team.ga || 0);
+  };
+
+  // حفظ التعديلات اليدوية للفريق
+  const saveTeamChanges = async (id) => {
+    try {
+      const teamRef = doc(db, "teams", id);
+      await updateDoc(teamRef, {
+        name: editName,
+        group: editGroup,
+        pts: Number(editPts),
+        p: Number(editP),
+        gf: Number(editGf),
+        ga: Number(editGa)
+      });
+      setEditingTeamId(null);
+      fetchData();
+      alert('تم تحديث بيانات الفريق بنجاح!');
+    } catch (error) {
+      console.error("خطأ في تحديث الفريق:", error);
     }
   };
 
@@ -382,8 +419,8 @@ export default function App() {
               >
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات المنفصلة</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT (مع زر التعديل المباشر)</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات مع إمكانية تعديل النقاط مباشرة</div>
                 </div>
               </div>
             </>
@@ -632,23 +669,63 @@ export default function App() {
                         <th>لعب</th>
                         <th>الفرق</th>
                         <th>نقاط</th>
+                        {role === 'admin' && <th>تعديل</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {sortedTeams.map(t => {
                         const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
                         const diffColor = goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff';
+                        const isEditing = editingTeamId === t.id;
+
                         return (
                           <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
-                              {t.name}
+                              {isEditing ? (
+                                <input 
+                                  type="text" 
+                                  value={editName} 
+                                  onChange={(e) => setEditName(e.target.value)} 
+                                  style={{ width: '90px', background: '#0f172a', color: '#fff', border: '1px solid #38bdf8', padding: '2px' }} 
+                                />
+                              ) : t.name}
                             </td>
-                            <td>{t.p || 0}</td>
+                            <td>
+                              {isEditing ? (
+                                <input 
+                                  type="number" 
+                                  value={editP} 
+                                  onChange={(e) => setEditP(e.target.value)} 
+                                  style={{ width: '35px', background: '#0f172a', color: '#fff', textAlign: 'center' }} 
+                                />
+                              ) : (t.p || 0)}
+                            </td>
                             <td style={{ color: diffColor }}>
                               {goalDiff > 0 ? '+' + goalDiff : goalDiff}
                             </td>
-                            <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{t.pts || 0}</td>
+                            <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>
+                              {isEditing ? (
+                                <input 
+                                  type="number" 
+                                  value={editPts} 
+                                  onChange={(e) => setEditPts(e.target.value)} 
+                                  style={{ width: '40px', background: '#0f172a', color: '#fff', textAlign: 'center' }} 
+                                />
+                              ) : (t.pts || 0)}
+                            </td>
+                            {role === 'admin' && (
+                              <td>
+                                {isEditing ? (
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                    <button onClick={() => saveTeamChanges(t.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>حفظ</button>
+                                    <button onClick={() => setEditingTeamId(null)} style={{ background: '#64748b', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>إلغاء</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => startEditingTeam(t)} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>تعديل</button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
