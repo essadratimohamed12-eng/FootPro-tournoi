@@ -380,14 +380,24 @@ function MainApp() {
         { id: 'q4', phase: 'Quarts de finale', index: 3, home: qualifiedTeams[3]?.team || '', away: qualifiedTeams[4]?.team || qualifiedTeams[0]?.team || '', homeScore: null, awayScore: null }
       ];
 
+      const defaultDemis = [
+        { id: 'd1', phase: 'Demi-finales', index: 0, home: '', away: '', homeScore: null, awayScore: null },
+        { id: 'd2', phase: 'Demi-finales', index: 1, home: '', away: '', homeScore: null, awayScore: null }
+      ];
+
+      const defaultFinale = [
+        { id: 'f1', phase: 'Finale', index: 0, home: '', away: '', homeScore: null, awayScore: null }
+      ];
+
       const batch = writeBatch(db);
-      for (const q of defaultQuarts) {
-        const ref = doc(db, "knockout_matches", q.id);
-        batch.set(ref, q);
-      }
+      [...defaultQuarts, ...defaultDemis, ...defaultFinale].forEach(item => {
+        const ref = doc(db, "knockout_matches", item.id);
+        batch.set(ref, item);
+      });
+
       await batch.commit();
       await fetchData();
-      alert("✨ تم توليد مباريات ربع النهائي أوتوماتيكياً بنجاح!");
+      alert("✨ تم توليد مباريات ربع النهائي ونصف النهائي والنهائي أوتوماتيكياً بنجاح!");
     } catch (err) {
       console.error("خطأ في التوليد:", err);
     }
@@ -403,7 +413,7 @@ function MainApp() {
     }
   };
 
-  // دالة تحديث وحفظ نتيجة مباراة إقصائية (ربع النهائي)
+  // دالة تحديث وحفظ النتيجة في الأدوار الإقصائية مع الترحيل التلقائي للدور الموالي
   const updateKnockoutScore = async (matchId, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -419,8 +429,53 @@ function MainApp() {
         homeScore: hs,
         awayScore: as
       });
-      fetchData();
-      alert("تم حفظ نتيجة مباراة الإقصاء بنجاح! 🏆");
+
+      const koSnapshot = await getDocs(collection(db, "knockout_matches"));
+      const currentKo = koSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const winnerOf = (id) => {
+        const m = currentKo.find(item => item.id === id);
+        if (!m || m.homeScore === null || m.awayScore === null || m.homeScore === undefined || m.awayScore === undefined) return '';
+        return Number(m.homeScore) >= Number(m.awayScore) ? m.home : m.away;
+      };
+
+      // إذا تم حفظ نتيجة في ربع النهائي (q1, q2, q3, q4) -> تأهيل الفائزين لنصف النهائي (d1, d2) أوتوماتيكياً
+      if (['q1', 'q2', 'q3', 'q4'].includes(matchId)) {
+        // تحديث محلي مؤقت لمعرفة الفائز فوراً
+        const target = currentKo.find(m => m.id === matchId);
+        if (target) { target.homeScore = hs; target.awayScore = as; }
+
+        const q1Win = winnerOf('q1');
+        const q2Win = winnerOf('q2');
+        const q3Win = winnerOf('q3');
+        const q4Win = winnerOf('q4');
+
+        await updateDoc(doc(db, "knockout_matches", 'd1'), { 
+          home: q1Win || currentKo.find(m => m.id === 'd1')?.home || '', 
+          away: q2Win || currentKo.find(m => m.id === 'd1')?.away || '' 
+        });
+        await updateDoc(doc(db, "knockout_matches", 'd2'), { 
+          home: q3Win || currentKo.find(m => m.id === 'd2')?.home || '', 
+          away: q4Win || currentKo.find(m => m.id === 'd2')?.away || '' 
+        });
+      }
+
+      // إذا تم حفظ نتيجة في نصف النهائي (d1, d2) -> تأهيل الفائزين للنهائي (f1) أوتوماتيكياً
+      if (['d1', 'd2'].includes(matchId)) {
+        const target = currentKo.find(m => m.id === matchId);
+        if (target) { target.homeScore = hs; target.awayScore = as; }
+
+        const d1Win = winnerOf('d1');
+        const d2Win = winnerOf('d2');
+
+        await updateDoc(doc(db, "knockout_matches", 'f1'), { 
+          home: d1Win || currentKo.find(m => m.id === 'f1')?.home || '', 
+          away: d2Win || currentKo.find(m => m.id === 'f1')?.away || '' 
+        });
+      }
+
+      await fetchData();
+      alert("تم حفظ النتيجة وتأهل الفريق الفائز إلى الدور الموالي أوتوماتيكياً! 🏆");
     } catch (err) {
       console.error("خطأ في حفظ النتيجة:", err);
     }
@@ -589,7 +644,7 @@ function MainApp() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد ربع النهائي أوتوماتيكياً وتعديل النتائج والفرق يدوياً</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد وترحيل الفرق أوتوماتيكياً بين الأدوار الإقصائية</div>
             </div>
           </div>
 
@@ -980,7 +1035,7 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يمكنك تعديل الفريق والنتيجة يدوياً)</div>
+                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يتأهل الفائز لنصف النهائي أوتوماتيكياً)</div>
                     </div>
                   ))
                 )}
@@ -989,28 +1044,149 @@ function MainApp() {
 
             {phase2Tab === 'Demi-finales' && (
               <>
-                {[
-                  { homeMatch: 'الفائز من ربع 1', awayMatch: 'الفائز من ربع 2' },
-                  { homeMatch: 'الفائز من ربع 3', awayMatch: 'الفائز من ربع 4' }
-                ].map((m, idx) => (
-                  <div key={idx} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', color: '#38bdf8', marginBottom: '5px', fontWeight: 'bold' }}>Vainqueur de / Vainqueur de</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 'bold' }}>{m.homeMatch}</span>
-                      <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>- : -</div>
-                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 'bold' }}>{m.awayMatch}</span>
-                    </div>
+                {(knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').length === 0 ? (
+                  <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
+                    لم يتم تفعيل مباريات نصف النهائي بعد. قم بحفظ نتائج ربع النهائي أولاً.
                   </div>
-                ))}
+                ) : (
+                  (knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').map((m) => (
+                    <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '5px' }}>
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.home || ''} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'home', e.target.value)}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px' }}
+                          >
+                            <option value="">اختر الفريق</option>
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
+                        )}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input 
+                            type="number" 
+                            defaultValue={m.homeScore ?? ''} 
+                            id={`ko-h-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
+                          />
+                          <span>-</span>
+                          <input 
+                            type="number" 
+                            defaultValue={m.awayScore ?? ''} 
+                            id={`ko-a-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
+                          />
+                          {role === 'admin' && (
+                            <button 
+                              onClick={() => {
+                                const h = document.getElementById(`ko-h-${m.id}`).value;
+                                const a = document.getElementById(`ko-a-${m.id}`).value;
+                                updateKnockoutScore(m.id, h, a);
+                              }}
+                              style={{ background: '#10b981', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px' }}
+                            >
+                              حفظ
+                            </button>
+                          )}
+                        </div>
+
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.away || ''} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'away', e.target.value)}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px' }}
+                          >
+                            <option value="">اختر الفريق</option>
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ نصف نهائي منظم (يتأهل الفائز للنهائي أوتوماتيكياً)</div>
+                    </div>
+                  ))
+                )}
               </>
             )}
 
             {phase2Tab === 'Finale' && (
-              <div style={{ background: '#1e293b', borderRadius: '10px', padding: '20px', textAlign: 'center', border: '1px solid #334155' }}>
-                <div style={{ fontSize: '12px', color: '#38bdf8', marginBottom: '10px', fontWeight: 'bold' }}>المباراة النهائية الكبرى</div>
-                <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '15px' }}>متأهل النصف 1 VS متأهل النصف 2</div>
-                <div style={{ padding: '10px 20px', background: '#0f172a', borderRadius: '6px', display: 'inline-block', fontWeight: 'bold', color: '#38bdf8' }}>- : -</div>
-              </div>
+              <>
+                {(knockoutMatches || []).filter(m => m && m.phase === 'Finale').length === 0 ? (
+                  <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
+                    لم يتم تفعيل المباراة النهائية بعد.
+                  </div>
+                ) : (
+                  (knockoutMatches || []).filter(m => m && m.phase === 'Finale').map((m) => (
+                    <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '20px', textAlign: 'center', border: '1px solid #334155' }}>
+                      <div style={{ fontSize: '12px', color: '#38bdf8', marginBottom: '10px', fontWeight: 'bold' }}>المباراة النهائية الكبرى</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.home || ''} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'home', e.target.value)}
+                            style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold' }}
+                          >
+                            <option value="">اختر طرف النهائي 1</option>
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold', fontSize: '15px' }}>{m.home || 'تحديد لاحقاً'}</span>
+                        )}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input 
+                            type="number" 
+                            defaultValue={m.homeScore ?? ''} 
+                            id={`ko-h-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '14px' }} 
+                          />
+                          <span>-</span>
+                          <input 
+                            type="number" 
+                            defaultValue={m.awayScore ?? ''} 
+                            id={`ko-a-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '14px' }} 
+                          />
+                          {role === 'admin' && (
+                            <button 
+                              onClick={() => {
+                                const h = document.getElementById(`ko-h-${m.id}`).value;
+                                const a = document.getElementById(`ko-a-${m.id}`).value;
+                                updateKnockoutScore(m.id, h, a);
+                              }}
+                              style={{ background: '#10b981', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
+                            >
+                              حفظ
+                            </button>
+                          )}
+                        </div>
+
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.away || ''} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'away', e.target.value)}
+                            style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold' }}
+                          >
+                            <option value="">اختر طرف النهائي 2</option>
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold', fontSize: '15px' }}>{m.away || 'تحديد لاحقاً'}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#34d399' }}>🏆 المباراة الختامية للبطولة</div>
+                    </div>
+                  ))
+                )}
+              </>
             )}
           </div>
         </div>
