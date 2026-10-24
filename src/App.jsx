@@ -10,7 +10,39 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
-export default function App() {
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Caught error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ background: '#0b0f19', color: '#f87171', padding: '40px', textAlign: 'center', fontFamily: 'Cairo', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', border: '1px solid #334155', maxWidth: '400px' }}>
+            <h2 style={{ fontSize: '18px', marginBottom: '10px', color: '#f87171' }}>⚠️ تنبيه نظام الحماية</h2>
+            <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>تم رصد خطأ بسيط في الواجهة وتم منعه من إيقاف التطبيق.</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+            >
+              إعادة تحميل الصفحة 🔄
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function MainApp() {
   const [role, setRole] = useState(null);
   
   const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('admin_pass') || 'admin123');
@@ -153,7 +185,7 @@ export default function App() {
       const batch = writeBatch(db);
       const statsMap = {};
 
-      allTeams.forEach(t => {
+      (allTeams || []).forEach(t => {
         if (t && t.name) {
           statsMap[t.name.trim()] = {
             id: t.id,
@@ -162,7 +194,7 @@ export default function App() {
         }
       });
 
-      allMatches.forEach(m => {
+      (allMatches || []).forEach(m => {
         if (m && m.status === 'انتهت' && m.homeScore !== null && m.awayScore !== null && m.homeScore !== undefined && m.awayScore !== undefined) {
           const hName = m.home?.trim();
           const aName = m.away?.trim();
@@ -371,6 +403,29 @@ export default function App() {
     }
   };
 
+  // دالة تحديث وحفظ نتيجة مباراة إقصائية (ربع النهائي)
+  const updateKnockoutScore = async (matchId, hScore, aScore) => {
+    const hs = parseInt(hScore);
+    const as = parseInt(aScore);
+
+    if (isNaN(hs) || isNaN(as)) {
+      alert("المرجو إدخال أرقام صحيحة في النتيجة!");
+      return;
+    }
+
+    try {
+      const ref = doc(db, "knockout_matches", matchId);
+      await updateDoc(ref, {
+        homeScore: hs,
+        awayScore: as
+      });
+      fetchData();
+      alert("تم حفظ نتيجة مباراة الإقصاء بنجاح! 🏆");
+    } catch (err) {
+      console.error("خطأ في حفظ النتيجة:", err);
+    }
+  };
+
   const handleResetTournament = async () => {
     if (window.confirm("⚠️ هل أنت متأكد من مسح جميع بيانات هذه البطولة نهائياً؟")) {
       try {
@@ -433,7 +488,7 @@ export default function App() {
     );
   }
 
-  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د', 'GROUPE A', 'GROUPE B', 'GROUPE C', 'GROUPE D'];
+  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
   const uniqueGroups = [...new Set((teams || []).map(t => t?.group))].filter(Boolean);
   const displayGroups = uniqueGroups.length > 0 ? uniqueGroups : ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
 
@@ -534,7 +589,7 @@ export default function App() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد ربع النهائي أوتوماتيكياً (مع أفضل الثوالث) وتغيير الفرق يدوياً</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد ربع النهائي أوتوماتيكياً وتعديل النتائج والفرق يدوياً</div>
             </div>
           </div>
 
@@ -868,12 +923,12 @@ export default function App() {
                 ) : (
                   (knockoutMatches || []).filter(m => m && m.phase === 'Quarts de finale').map((m) => (
                     <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '5px' }}>
                         {role === 'admin' ? (
                           <select 
                             value={m.home || ''} 
                             onChange={(e) => updateKnockoutTeam(m.id, 'home', e.target.value)}
-                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px' }}
                           >
                             <option value="">اختر الفريق</option>
                             {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
@@ -882,13 +937,41 @@ export default function App() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
                         )}
 
-                        <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8', margin: '0 8px' }}>- : -</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input 
+                            type="number" 
+                            defaultValue={m.homeScore ?? ''} 
+                            id={`ko-h-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
+                          />
+                          <span>-</span>
+                          <input 
+                            type="number" 
+                            defaultValue={m.awayScore ?? ''} 
+                            id={`ko-a-${m.id}`} 
+                            disabled={role !== 'admin'}
+                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
+                          />
+                          {role === 'admin' && (
+                            <button 
+                              onClick={() => {
+                                const h = document.getElementById(`ko-h-${m.id}`).value;
+                                const a = document.getElementById(`ko-a-${m.id}`).value;
+                                updateKnockoutScore(m.id, h, a);
+                              }}
+                              style={{ background: '#10b981', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px' }}
+                            >
+                              حفظ
+                            </button>
+                          )}
+                        </div>
 
                         {role === 'admin' ? (
                           <select 
                             value={m.away || ''} 
                             onChange={(e) => updateKnockoutTeam(m.id, 'away', e.target.value)}
-                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px' }}
                           >
                             <option value="">اختر الفريق</option>
                             {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
@@ -897,7 +980,7 @@ export default function App() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يمكنك تعديل أي فريق يدوياً عبر القائمة)</div>
+                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يمكنك تعديل الفريق والنتيجة يدوياً)</div>
                     </div>
                   ))
                 )}
@@ -934,5 +1017,13 @@ export default function App() {
       )}
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
   );
 }
