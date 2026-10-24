@@ -116,16 +116,77 @@ export default function App() {
     }
   };
 
-  // حذف مباراة نهائياً
   const handleDeleteMatch = async (matchId) => {
     if (window.confirm("⚠️ هل أنت متأكد من حذف هذه المباراة؟")) {
       try {
         await deleteDoc(doc(db, "matches", matchId));
+        // إعادة حساب الترتيب بعد الحذف
+        await recalculateAllStats();
         fetchData();
-        alert("تم حذف المباراة بنجاح!");
+        alert("تم حذف المباراة بنجاح وتحديث الترتيب!");
       } catch (err) {
         console.error("خطأ في حذف المباراة:", err);
       }
+    }
+  };
+
+  // نظام إعادة حساب الترتيب بدقة تامة من جميع المباريات المنتهية لتجنب أي أخطاء تراكمية
+  const recalculateAllStats = async () => {
+    try {
+      const teamsSnapshot = await getDocs(collection(db, "teams"));
+      const allTeams = teamsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const matchesSnapshot = await getDocs(collection(db, "matches"));
+      const allMatches = matchesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const batch = writeBatch(db);
+      const statsMap = {};
+
+      allTeams.forEach(t => {
+        statsMap[t.name.trim()] = {
+          id: t.id,
+          p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
+        };
+      });
+
+      allMatches.forEach(m => {
+        if (m.status === 'انتهت' && m.homeScore !== null && m.awayScore !== null && m.homeScore !== undefined && m.awayScore !== undefined) {
+          const hName = m.home?.trim();
+          const aName = m.away?.trim();
+          const hS = Number(m.homeScore);
+          const aS = Number(m.awayScore);
+
+          if (statsMap[hName]) {
+            statsMap[hName].p += 1;
+            statsMap[hName].gf += hS;
+            statsMap[hName].ga += aS;
+            if (hS > aS) { statsMap[hName].w += 1; statsMap[hName].pts += 3; }
+            else if (hS === aS) { statsMap[hName].d += 1; statsMap[hName].pts += 1; }
+            else { statsMap[hName].l += 1; }
+          }
+
+          if (statsMap[aName]) {
+            statsMap[aName].p += 1;
+            statsMap[aName].gf += aS;
+            statsMap[aName].ga += hS;
+            if (aS > hS) { statsMap[aName].w += 1; statsMap[aName].pts += 3; }
+            else if (aS === hS) { statsMap[aName].d += 1; statsMap[aName].pts += 1; }
+            else { statsMap[aName].l += 1; }
+          }
+        }
+      });
+
+      for (const tName in statsMap) {
+        const s = statsMap[tName];
+        const tRef = doc(db, "teams", s.id);
+        batch.update(tRef, {
+          p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, pts: s.pts
+        });
+      }
+
+      await batch.commit();
+    } catch (e) {
+      console.error("خطأ في إعادة الحساب:", e);
     }
   };
 
@@ -146,43 +207,10 @@ export default function App() {
         status: 'انتهت'
       });
 
-      const homeTeamObj = teams.find(t => t.name?.trim() === match.home?.trim());
-      const awayTeamObj = teams.find(t => t.name?.trim() === match.away?.trim());
-
-      if (homeTeamObj && awayTeamObj) {
-        let homeWin = hs > as ? 1 : 0;
-        let homeDraw = hs === as ? 1 : 0;
-        let homeLoss = hs < as ? 1 : 0;
-        let homePts = homeWin * 3 + homeDraw * 1;
-
-        let awayWin = as > hs ? 1 : 0;
-        let awayDraw = as === hs ? 1 : 0;
-        let awayLoss = as < hs ? 1 : 0;
-        let awayPts = awayWin * 3 + awayDraw * 1;
-
-        await updateDoc(doc(db, "teams", homeTeamObj.id), {
-          p: (Number(homeTeamObj.p) || 0) + 1,
-          w: (Number(homeTeamObj.w) || 0) + homeWin,
-          d: (Number(homeTeamObj.d) || 0) + homeDraw,
-          l: (Number(homeTeamObj.l) || 0) + homeLoss,
-          gf: (Number(homeTeamObj.gf) || 0) + hs,
-          ga: (Number(homeTeamObj.ga) || 0) + as,
-          pts: (Number(homeTeamObj.pts) || 0) + homePts
-        });
-
-        await updateDoc(doc(db, "teams", awayTeamObj.id), {
-          p: (Number(awayTeamObj.p) || 0) + 1,
-          w: (Number(awayTeamObj.w) || 0) + awayWin,
-          d: (Number(awayTeamObj.d) || 0) + awayDraw,
-          l: (Number(awayTeamObj.l) || 0) + awayLoss,
-          gf: (Number(awayTeamObj.gf) || 0) + as,
-          ga: (Number(awayTeamObj.ga) || 0) + hs,
-          pts: (Number(awayTeamObj.pts) || 0) + awayPts
-        });
-      }
-
+      // إعادة حساب كافة إحصائيات الفرق من الصفر لضمان دقة 100%
+      await recalculateAllStats();
       await fetchData();
-      alert("تم تحديث النتيجة وترتيب الفرق أوتوماتيكياً بنجاح! 🏆");
+      alert("تم تعديل وحفظ النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! 🏆");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
     }
@@ -343,8 +371,8 @@ export default function App() {
               >
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (المباريات حسب الجولات)</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض وجدولة وتعديل وحذف مباريات الجولات</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (المباريات والتعديل)</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>تعديل، حذف، وبرمجة مباريات الجولات</div>
                 </div>
               </div>
 
@@ -483,7 +511,7 @@ export default function App() {
                     <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #334155' }} />
                     <span style={{ fontWeight: 'bold' }}>{t.name} <span style={{ fontSize: '11px', color: '#94a3b8' }}>({t.group})</span></span>
                   </div>
-                  <button onClick={async () => { await deleteDoc(doc(db, "teams", t.id)); fetchData(); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>حذف</button>
+                  <button onClick={async () => { await deleteDoc(doc(db, "teams", t.id)); await recalculateAllStats(); fetchData(); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>حذف</button>
                 </div>
               ))}
             </div>
@@ -560,7 +588,7 @@ export default function App() {
                             }}
                             style={{ background: '#10b981', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
                           >
-                            حفظ
+                            تعديل وحفظ
                           </button>
                           <button 
                             onClick={() => handleDeleteMatch(match.id)}
