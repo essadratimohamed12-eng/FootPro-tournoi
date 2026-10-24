@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   collection, 
   getDocs, 
+  getDoc,
   addDoc, 
   updateDoc, 
   deleteDoc, 
@@ -46,16 +47,18 @@ class ErrorBoundary extends React.Component {
 function MainApp() {
   const [role, setRole] = useState(null);
   
-  const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('admin_pass') || 'admin123');
-  const [viewerPassword, setViewerPassword] = useState(() => localStorage.getItem('viewer_pass') || 'viewer123');
+  // كلمات المرور مرتبطة بقاعدة البيانات Firebase لتجتنب مشاكل الأجهزة المختلفة
+  const [adminPassword, setAdminPassword] = useState('admin123');
+  const [viewerPassword, setViewerPassword] = useState('viewer123');
+  
   const [adminInput, setAdminInput] = useState('');
   const [viewerInput, setViewerInput] = useState('');
   const [newAdminPass, setNewAdminPass] = useState('');
   const [newViewerPass, setNewViewerPass] = useState('');
 
-  const [tournamentName, setTournamentName] = useState(() => localStorage.getItem('tourney_name') || 'PES AND ALSTOM');
-  const [tournamentSystem, setTournamentSystem] = useState(() => localStorage.getItem('tourney_sys') || 'groups_knockout'); 
-  const [matchLegs, setMatchLegs] = useState(() => localStorage.getItem('match_legs') || 'single'); 
+  const [tournamentName, setTournamentName] = useState('PES AND ALSTOM');
+  const [tournamentSystem, setTournamentSystem] = useState('groups_knockout'); 
+  const [matchLegs, setMatchLegs] = useState('single'); 
 
   const [currentView, setCurrentView] = useState('menu'); 
   const [phase1Tab, setPhase1Tab] = useState('Journée 1');
@@ -83,6 +86,17 @@ function MainApp() {
 
   const fetchData = async () => {
     try {
+      // جلب إعدادات الكودات والبطولة من Firebase
+      const settingsDoc = await getDoc(doc(db, "settings", "tournament_config"));
+      if (settingsDoc.exists()) {
+        const data = settingsDoc.data();
+        if (data.adminPassword) setAdminPassword(data.adminPassword);
+        if (data.viewerPassword) setViewerPassword(data.viewerPassword);
+        if (data.tournamentName) setTournamentName(data.tournamentName);
+        if (data.tournamentSystem) setTournamentSystem(data.tournamentSystem);
+        if (data.matchLegs) setMatchLegs(data.matchLegs);
+      }
+
       const teamsSnapshot = await getDocs(collection(db, "teams"));
       const teamsList = teamsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setTeams(teamsList || []);
@@ -124,6 +138,23 @@ function MainApp() {
       alert('كلمة مرور المشاهد غير صحيحة!');
     }
     setViewerInput('');
+  };
+
+  const handleUpdateSettings = async (newAdmin, newViewer, newName, newSys, newLegs) => {
+    try {
+      const configRef = doc(db, "settings", "tournament_config");
+      await setDoc(configRef, {
+        adminPassword: newAdmin ?? adminPassword,
+        viewerPassword: newViewer ?? viewerPassword,
+        tournamentName: newName ?? tournamentName,
+        tournamentSystem: newSys ?? tournamentSystem,
+        matchLegs: newLegs ?? matchLegs
+      }, { merge: true });
+      fetchData();
+      alert("تم حفظ الإعدادات وتحديثها للجميع بنجاح! ⚙️");
+    } catch (err) {
+      console.error("خطأ في حفظ الإعدادات:", err);
+    }
   };
 
   const handleImageUpload = (e) => {
@@ -414,7 +445,6 @@ function MainApp() {
     }
   };
 
-  // دالة متطورة وآمنة لحفظ النتيجة وترحيل الفائز باستخدام setDoc مع merge
   const updateKnockoutScore = async (matchId, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -443,52 +473,41 @@ function MainApp() {
         return Number(curHs) >= Number(curAs) ? m.home : m.away;
       };
 
-      // إذا كان التعديل في ربع النهائي -> ترحيل الفائزين لنصف النهائي
       if (['q1', 'q2', 'q3', 'q4'].includes(matchId)) {
         const q1Win = winnerOf('q1');
         const q2Win = winnerOf('q2');
         const q3Win = winnerOf('q3');
         const q4Win = winnerOf('q4');
 
-        const d1Ref = doc(db, "knockout_matches", 'd1');
-        await setDoc(d1Ref, { 
-          id: 'd1',
-          phase: 'Demi-finales',
-          index: 0,
+        await setDoc(doc(db, "knockout_matches", 'd1'), { 
+          id: 'd1', phase: 'Demi-finales', index: 0,
           home: q1Win || currentKo.find(m => m.id === 'd1')?.home || '', 
           away: q2Win || currentKo.find(m => m.id === 'd1')?.away || '' 
         }, { merge: true });
 
-        const d2Ref = doc(db, "knockout_matches", 'd2');
-        await setDoc(d2Ref, { 
-          id: 'd2',
-          phase: 'Demi-finales',
-          index: 1,
+        await setDoc(doc(db, "knockout_matches", 'd2'), { 
+          id: 'd2', phase: 'Demi-finales', index: 1,
           home: q3Win || currentKo.find(m => m.id === 'd2')?.home || '', 
           away: q4Win || currentKo.find(m => m.id === 'd2')?.away || '' 
         }, { merge: true });
       }
 
-      // إذا كان التعديل في نصف النهائي -> ترحيل الفائزين للنهائي
       if (['d1', 'd2'].includes(matchId)) {
         const d1Win = winnerOf('d1');
         const d2Win = winnerOf('d2');
 
-        const f1Ref = doc(db, "knockout_matches", 'f1');
-        await setDoc(f1Ref, { 
-          id: 'f1',
-          phase: 'Finale',
-          index: 0,
+        await setDoc(doc(db, "knockout_matches", 'f1'), { 
+          id: 'f1', phase: 'Finale', index: 0,
           home: d1Win || currentKo.find(m => m.id === 'f1')?.home || '', 
           away: d2Win || currentKo.find(m => m.id === 'f1')?.away || '' 
         }, { merge: true });
       }
 
       await fetchData();
-      alert("تم حفظ النتيجة وتأهل الفريق الفائز إلى الدور الموالي أوتوماتيكياً! 🏆");
+      alert("تم حفظ النتيجة وتأهل الفريق للدور الموالي بنجاح! 🏆");
     } catch (err) {
       console.error("خطأ في حفظ النتيجة:", err);
-      alert("حدث خطأ أثناء حفظ النتيجة: " + err.message);
+      alert("حدث خطأ أثناء حفظ النتيجة.");
     }
   };
 
@@ -681,10 +700,7 @@ function MainApp() {
               <label style={{ fontSize: '13px', display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>اختر نظام البطولة:</label>
               <select 
                 value={tournamentSystem}
-                onChange={(e) => {
-                  setTournamentSystem(e.target.value);
-                  localStorage.setItem('tourney_sys', e.target.value);
-                }}
+                onChange={(e) => setTournamentSystem(e.target.value)}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               >
                 <option value="groups_knockout">دور المجموعات ثم أدوار إقصائية</option>
@@ -698,10 +714,7 @@ function MainApp() {
               <label style={{ fontSize: '13px', display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>نظام المباريات:</label>
               <select 
                 value={matchLegs}
-                onChange={(e) => {
-                  setMatchLegs(e.target.value);
-                  localStorage.setItem('match_legs', e.target.value);
-                }}
+                onChange={(e) => setMatchLegs(e.target.value)}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               >
                 <option value="single">مباراة واحدة (Match unique)</option>
@@ -710,15 +723,19 @@ function MainApp() {
             </div>
 
             <div style={{ borderTop: '1px solid #334155', paddingTop: '15px', marginTop: '15px' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر (تحديث عام لجميع المستخدمين)</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <input type="password" placeholder="مرور المشرف الجديد" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
-                <button onClick={() => { localStorage.setItem('admin_pass', newAdminPass); setAdminPassword(newAdminPass); alert('تم تحديث كلمة سر المشرف'); }} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
                 <input type="password" placeholder="مرور المشاهد الجديد" value={newViewerPass} onChange={(e) => setNewViewerPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
-                <button onClick={() => { localStorage.setItem('viewer_pass', newViewerPass); setViewerPassword(newViewerPass); alert('تم تحديث كلمة سر المشاهد'); }} style={{ background: '#64748b', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold' }}>حفظ</button>
               </div>
+              <button 
+                onClick={() => handleUpdateSettings(newAdminPass || adminPassword, newViewerPass || viewerPassword, tournamentName, tournamentSystem, matchLegs)} 
+                style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                حفظ الإعدادات وكلمات السر للجميع 💾
+              </button>
             </div>
 
             <div style={{ borderTop: '1px solid #334155', paddingTop: '20px', marginTop: '20px' }}>
