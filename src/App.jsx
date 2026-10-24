@@ -177,26 +177,29 @@ export default function App() {
       const ptsB = Number(b.pts) || 0;
       if (ptsB !== ptsA) return ptsB - ptsA;
 
-      // 2. المواجهات المباشرة بين الفريقين
       const directMatch = matches.find(m => 
         (m.home === a.name && m.away === b.name) || 
         (m.home === b.name && m.away === a.name)
       );
-      if (directMatch && directMatch.homeScore !== undefined && directMatch.awayScore !== undefined && directMatch.homeScore !== null && directMatch.awayScore !== null) {
+      if (directMatch && directMatch.homeScore !== null && directMatch.awayScore !== null) {
         const aIsHome = directMatch.home === a.name;
         const scoreA = aIsHome ? directMatch.homeScore : directMatch.awayScore;
         const scoreB = aIsHome ? directMatch.awayScore : directMatch.homeScore;
         if (scoreA !== scoreB) return scoreB - scoreA;
       }
 
-      // 3. فارق الأهداف
       const gdA = (Number(a.gf) || 0) - (Number(a.ga) || 0);
       const gdB = (Number(b.gf) || 0) - (Number(b.ga) || 0);
       if (gdB !== gdA) return gdB - gdA;
 
-      // 4. الأهداف المسجلة (له)
       return (Number(b.gf) || 0) - (Number(a.gf) || 0);
     });
+  };
+
+  const getDiffColor = (diff) => {
+    if (diff > 0) return '#4ade80';
+    if (diff < 0) return '#f87171';
+    return '#fff';
   };
 
   if (loading) {
@@ -337,7 +340,7 @@ export default function App() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>قرعة تلقائية تتجنب مواجهة فرق نفس المجموعة</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض المباريات الإقصائية</div>
             </div>
           </div>
 
@@ -497,7 +500,7 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة الترتيب بمعيار الترتيب الدقيق (النقاط -> المواجهات المباشرة -> فارق الأهداف -> الأهداف له) */}
+      {/* شاشة الترتيب */}
       {currentView === 'phase1_classement' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           {groupNames.map(group => {
@@ -528,7 +531,7 @@ export default function App() {
                             {t.name}
                           </td>
                           <td>{t.p || 0}</td>
-                          <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>
+                          <td style={{ color: getDiffColor(goalDiff) }}>
                             {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
                           </td>
                           <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{t.pts || 0}</td>
@@ -543,7 +546,7 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة مسار البطولة (مع القرعة الذكية التي تتجنب مواجهة فرق نفس المجموعة) */}
+      {/* شاشة مسار البطولة */}
       {currentView === 'phase2' && (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div style={{ display: 'flex', background: '#1e293b', borderBottom: '1px solid #334155' }}>
