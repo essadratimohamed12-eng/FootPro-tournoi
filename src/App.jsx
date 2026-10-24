@@ -13,7 +13,6 @@ import { db } from './firebase';
 export default function App() {
   const [role, setRole] = useState(null);
   
-  // كلمات المرور
   const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('admin_pass') || 'admin123');
   const [viewerPassword, setViewerPassword] = useState(() => localStorage.getItem('viewer_pass') || 'viewer123');
   const [adminInput, setAdminInput] = useState('');
@@ -21,7 +20,6 @@ export default function App() {
   const [newAdminPass, setNewAdminPass] = useState('');
   const [newViewerPass, setNewViewerPass] = useState('');
 
-  // إعدادات البطولة
   const [tournamentName, setTournamentName] = useState(() => localStorage.getItem('tourney_name') || 'PES AND ALSTOM');
   const [tournamentSystem, setTournamentSystem] = useState(() => localStorage.getItem('tourney_sys') || 'groups_knockout'); 
   const [matchLegs, setMatchLegs] = useState(() => localStorage.getItem('match_legs') || 'single'); 
@@ -34,7 +32,6 @@ export default function App() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // إدخال فريق جديد
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamGroup, setNewTeamGroup] = useState('GROUPE A');
   const [newTeamLogo, setNewTeamLogo] = useState('');
@@ -80,7 +77,6 @@ export default function App() {
     setViewerInput('');
   };
 
-  // رفع الشعار من الهاتف
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -92,7 +88,6 @@ export default function App() {
     }
   };
 
-  // تحديث النتيجة وتعديل الترتيب أوتوماتيكياً
   const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -170,7 +165,6 @@ export default function App() {
     }
   };
 
-  // دالة الترتيب الاحترافية: 1. النقاط -> 2. المواجهات المباشرة -> 3. فارق الأهداف -> 4. الأهداف له
   const sortGroupTeams = (groupTeams) => {
     return groupTeams.sort((a, b) => {
       const ptsA = Number(a.pts) || 0;
@@ -196,17 +190,10 @@ export default function App() {
     });
   };
 
-  const getDiffColor = (diff) => {
-    if (diff > 0) return '#4ade80';
-    if (diff < 0) return '#f87171';
-    return '#fff';
-  };
-
   if (loading) {
     return <div style={{ color: '#38bdf8', textAlign: 'center', marginTop: '100px', fontSize: '18px', fontFamily: 'Cairo' }}>جاري تحميل البطولة... ⚽</div>;
   }
 
-  // شاشة تسجيل الدخول
   if (!role) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif' }}>
@@ -250,7 +237,6 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif', paddingBottom: '40px' }}>
       
-      {/* الهيدر العلوي */}
       <div style={{ backgroundColor: '#1e293b', color: '#fff', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           {currentView !== 'menu' && (
@@ -271,7 +257,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* القائمة الرئيسية */}
       {currentView === 'menu' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           
@@ -323,14 +308,14 @@ export default function App() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات (النقاط -> المواجهات المباشرة -> الأهداف)</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات</div>
                 </div>
               </div>
             </>
           )}
 
           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '20px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 2 (الأدوار الإقصائية والقرعة الذكية)
+            Phase 2 (الأدوار الإقصائية)
           </div>
 
           <div 
@@ -347,7 +332,6 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة الإعدادات */}
       {currentView === 'infos' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
@@ -389,7 +373,6 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة المشاركين */}
       {currentView === 'participants' && role === 'admin' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
@@ -434,7 +417,6 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة نقاط المباريات */}
       {currentView === 'phase1_points' && (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div style={{ display: 'flex', background: '#1e293b', borderBottom: '1px solid #334155' }}>
@@ -500,7 +482,6 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة الترتيب */}
       {currentView === 'phase1_classement' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           {groupNames.map(group => {
@@ -524,6 +505,7 @@ export default function App() {
                   <tbody>
                     {sortedTeams.map(t => {
                       const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
+                      const diffColor = goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff';
                       return (
                         <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -531,8 +513,8 @@ export default function App() {
                             {t.name}
                           </td>
                           <td>{t.p || 0}</td>
-                          <td style={{ color: getDiffColor(goalDiff) }}>
-                            {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
+                          <td style={{ color: diffColor }}>
+                            {goalDiff > 0 ? '+' + goalDiff : goalDiff}
                           </td>
                           <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{t.pts || 0}</td>
                         </tr>
@@ -546,7 +528,6 @@ export default function App() {
         </div>
       )}
 
-      {/* شاشة مسار البطولة */}
       {currentView === 'phase2' && (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div style={{ display: 'flex', background: '#1e293b', borderBottom: '1px solid #334155' }}>
