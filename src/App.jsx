@@ -271,7 +271,7 @@ export default function App() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏆</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>INFOS SUR LE TOURNOI</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات البطولة وكلمات المرور</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات ونظام البطولة وكلمات المرور</div>
             </div>
           </div>
 
@@ -296,8 +296,8 @@ export default function App() {
               >
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (نتائج المباريات)</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>تحديث وتعديل النتائج أوتوماتيكياً</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (المباريات حسب الجولات)</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>Journée 1, 2, 3 وتحديث النتائج أوتوماتيكياً</div>
                 </div>
               </div>
 
@@ -308,14 +308,14 @@ export default function App() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات منفصلة بمعايير دقيقة</div>
                 </div>
               </div>
             </>
           )}
 
           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '20px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 2 (الأدوار الإقصائية)
+            Phase 2 (الأدوار الإقصائية المنظمة)
           </div>
 
           <div 
@@ -325,7 +325,7 @@ export default function App() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض المباريات الإقصائية</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>مباريات خروج المغلوب منظمة بعيدة عن المجموعات</div>
             </div>
           </div>
 
@@ -335,7 +335,7 @@ export default function App() {
       {currentView === 'infos' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
-            <h2 style={{ fontSize: '16px', color: '#38bdf8', marginBottom: '15px' }}>إعدادات البطولة</h2>
+            <h2 style={{ fontSize: '16px', color: '#38bdf8', marginBottom: '15px' }}>إعدادات ونظام البطولة</h2>
             
             <div style={{ marginBottom: '15px' }}>
               <label style={{ fontSize: '13px', display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>اسم البطولة:</label>
@@ -346,6 +346,40 @@ export default function App() {
                 disabled={role !== 'admin'}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               />
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ fontSize: '13px', display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>اختر نظام البطولة:</label>
+              <select 
+                value={tournamentSystem}
+                onChange={(e) => {
+                  setTournamentSystem(e.target.value);
+                  localStorage.setItem('tourney_sys', e.target.value);
+                }}
+                disabled={role !== 'admin'}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+              >
+                <option value="groups_knockout">دور المجموعات ثم أدوار إقصائية</option>
+                <option value="league">دوري عادي (مجموعات فقط)</option>
+                <option value="league_knockout">دوري ثم أدوار إقصائية</option>
+                <option value="knockout_only">أدوار إقصائية فقط</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '13px', display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>نظام المباريات:</label>
+              <select 
+                value={matchLegs}
+                onChange={(e) => {
+                  setMatchLegs(e.target.value);
+                  localStorage.setItem('match_legs', e.target.value);
+                }}
+                disabled={role !== 'admin'}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+              >
+                <option value="single">مباراة واحدة (Match unique)</option>
+                <option value="aller_retour">ذهاب وإياب (Aller-Retour)</option>
+              </select>
             </div>
 
             {role === 'admin' && (
@@ -432,7 +466,7 @@ export default function App() {
           </div>
 
           <div style={{ padding: '15px' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '15px', margin: '10px 0', color: '#38bdf8' }}>المباريات والنتائج الفورية</div>
+            <div style={{ fontWeight: 'bold', fontSize: '15px', margin: '10px 0', color: '#38bdf8' }}>مباريات {phase1Tab}</div>
             
             {matches.length === 0 ? (
               <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
@@ -557,7 +591,7 @@ export default function App() {
                       <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>- : -</div>
                       <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away}</span>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#34d399' }}>✨ قرعة ذكية: فرق من مجموعات مختلفة</div>
+                    <div style={{ fontSize: '11px', color: '#34d399' }}>✨ دور ربع النهائي منظم ومنفصل عن المجموعات</div>
                   </div>
                 ))}
               </>
