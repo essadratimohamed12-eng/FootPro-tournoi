@@ -10,15 +10,17 @@ import {
 import { db } from './firebase';
 
 export default function App() {
-  // نظام تسجيل الدخول (مشرف / مشاهد)
-  const [role, setRole] = useState(null); // 'admin' أو 'viewer'
+  const [role, setRole] = useState(null);
   const [passwordInput, setPasswordInput] = useState('');
+  
+  // حفظ واسترجاع كلمة المرور الخاصة بالمشرف من متصفحك
+  const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('admin_pass') || 'admin123');
+  const [newAdminPass, setNewAdminPass] = useState('');
 
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // إضافات جديدة للفرق والمباريات (خاص بالمشرف)
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamGroup, setNewTeamGroup] = useState('المجموعة أ');
 
@@ -43,25 +45,32 @@ export default function App() {
     fetchData();
   }, []);
 
-  // تسجيل الدخول بكلمة المرور
   const handleLogin = (selectedRole) => {
     if (selectedRole === 'admin') {
-      if (passwordInput === 'admin123') {
+      if (passwordInput === adminPassword) {
         setRole('admin');
       } else {
         alert('كلمة مرور المشرف غير صحيحة!');
       }
     } else if (selectedRole === 'viewer') {
-      if (passwordInput === 'viewer123' || passwordInput === '') {
-        setRole('viewer');
-      } else {
-        alert('كلمة مرور المشاهد غير صحيحة!');
-      }
+      setRole('viewer');
     }
     setPasswordInput('');
   };
 
-  // إضافة فريق جديد
+  // دالة تغيير كلمة المرور للمشرف
+  const handleChangePassword = (e) => {
+    e.preventDefault();
+    if (!newAdminPass.trim()) {
+      alert('المرجو إدخال كلمة المرور الجديدة!');
+      return;
+    }
+    localStorage.setItem('admin_pass', newAdminPass);
+    setAdminPassword(newAdminPass);
+    setNewAdminPass('');
+    alert('تم تحديث كلمة المرور بنجاح! 🔑');
+  };
+
   const handleAddTeam = async (e) => {
     e.preventDefault();
     if (!newTeamName.trim()) return;
@@ -90,7 +99,6 @@ export default function App() {
     }
   };
 
-  // تحديث النتيجة
   const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -154,7 +162,7 @@ export default function App() {
     return <div style={{ color: '#fff', textAlign: 'center', marginTop: '50px' }}>جاري تحميل البيانات...</div>;
   }
 
-  // شاشة تسجيل الدخول
+  // شاشة تسجيل الدخول بدون عرض كلمة المرور الافتراضية
   if (!role) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif' }}>
@@ -181,13 +189,11 @@ export default function App() {
               دخول مشاهد (Viewer)
             </button>
           </div>
-          <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '15px' }}>كلمة مرور المشرف الافتراضية: admin123</p>
         </div>
       </div>
     );
   }
 
-  // تصفية المجموعات
   const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
   const knockoutMatches = matches.filter(m => m.stage && m.stage !== 'مجموعات');
 
@@ -205,31 +211,47 @@ export default function App() {
 
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         
-        {/* إضافة فريق (خاص بالمشرف فقط) */}
+        {/* لوحة تحكم المشرف: إضافة فرق وتغيير كلمة المرور */}
         {role === 'admin' && (
-          <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #334155' }}>
-            <h2 style={{ fontSize: '16px', marginBottom: '15px', color: '#38bdf8' }}>➕ إضافة فريق جديد للمجموعات</h2>
-            <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '10px' }}>
-              <input 
-                type="text" 
-                placeholder="اسم الفريق..." 
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                style={{ flex: 2, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-              />
-              <select 
-                value={newTeamGroup}
-                onChange={(e) => setNewTeamGroup(e.target.value)}
-                style={{ flex: 1, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-              >
-                {groupNames.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-              <button type="submit" style={{ background: '#06b6d4', border: 'none', padding: '10px 20px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>إضافة</button>
-            </form>
-          </div>
+          <>
+            <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #334155' }}>
+              <h2 style={{ fontSize: '16px', marginBottom: '15px', color: '#38bdf8' }}>➕ إضافة فريق جديد للمجموعات</h2>
+              <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="text" 
+                  placeholder="اسم الفريق..." 
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  style={{ flex: 2, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                />
+                <select 
+                  value={newTeamGroup}
+                  onChange={(e) => setNewTeamGroup(e.target.value)}
+                  style={{ flex: 1, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                >
+                  {groupNames.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <button type="submit" style={{ background: '#06b6d4', border: 'none', padding: '10px 20px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>إضافة</button>
+              </form>
+            </div>
+
+            <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #334155' }}>
+              <h2 style={{ fontSize: '16px', marginBottom: '15px', color: '#38bdf8' }}>🔑 تغيير كلمة مرور المشرف</h2>
+              <form onSubmit={handleChangePassword} style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="password" 
+                  placeholder="أدخل كلمة المرور الجديدة..." 
+                  value={newAdminPass}
+                  onChange={(e) => setNewAdminPass(e.target.value)}
+                  style={{ flex: 2, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                />
+                <button type="submit" style={{ background: '#10b981', border: 'none', padding: '10px 20px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>تحديث كلمة المرور</button>
+              </form>
+            </div>
+          </>
         )}
 
-        {/* 🌟 شجرة الأدوار الإقصائية المرئية (Path to Final) */}
+        {/* مسار الأدوار الإقصائية المرئية */}
         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '40px', border: '1px solid #334155' }}>
           <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px' }}>🌟 مسار الأدوار الإقصائية (Path to Final)</h2>
           {knockoutMatches.length === 0 ? (
