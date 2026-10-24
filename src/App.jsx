@@ -52,15 +52,15 @@ export default function App() {
     try {
       const teamsSnapshot = await getDocs(collection(db, "teams"));
       const teamsList = teamsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setTeams(teamsList);
+      setTeams(teamsList || []);
 
       const matchesSnapshot = await getDocs(collection(db, "matches"));
       const matchesList = matchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setMatches(matchesList);
+      setMatches(matchesList || []);
 
       const koSnapshot = await getDocs(collection(db, "knockout_matches"));
       const koList = koSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setKnockoutMatches(koList);
+      setKnockoutMatches(koList || []);
       
       setLoading(false);
     } catch (error) {
@@ -154,20 +154,22 @@ export default function App() {
       const statsMap = {};
 
       allTeams.forEach(t => {
-        statsMap[t.name.trim()] = {
-          id: t.id,
-          p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
-        };
+        if (t && t.name) {
+          statsMap[t.name.trim()] = {
+            id: t.id,
+            p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
+          };
+        }
       });
 
       allMatches.forEach(m => {
-        if (m.status === 'انتهت' && m.homeScore !== null && m.awayScore !== null && m.homeScore !== undefined && m.awayScore !== undefined) {
+        if (m && m.status === 'انتهت' && m.homeScore !== null && m.awayScore !== null && m.homeScore !== undefined && m.awayScore !== undefined) {
           const hName = m.home?.trim();
           const aName = m.away?.trim();
-          const hS = Number(m.homeScore);
-          const aS = Number(m.awayScore);
+          const hS = Number(m.homeScore) || 0;
+          const aS = Number(m.awayScore) || 0;
 
-          if (statsMap[hName]) {
+          if (hName && statsMap[hName]) {
             statsMap[hName].p += 1;
             statsMap[hName].gf += hS;
             statsMap[hName].ga += aS;
@@ -176,7 +178,7 @@ export default function App() {
             else { statsMap[hName].l += 1; }
           }
 
-          if (statsMap[aName]) {
+          if (aName && statsMap[aName]) {
             statsMap[aName].p += 1;
             statsMap[aName].gf += aS;
             statsMap[aName].ga += hS;
@@ -189,10 +191,12 @@ export default function App() {
 
       for (const tName in statsMap) {
         const s = statsMap[tName];
-        const tRef = doc(db, "teams", s.id);
-        batch.update(tRef, {
-          p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, pts: s.pts
-        });
+        if (s && s.id) {
+          const tRef = doc(db, "teams", s.id);
+          batch.update(tRef, {
+            p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, pts: s.pts
+          });
+        }
       }
 
       await batch.commit();
@@ -227,6 +231,7 @@ export default function App() {
   };
 
   const startEditingTeam = (team) => {
+    if (!team) return;
     setEditingTeamId(team.id);
     setEditName(team.name || '');
     setEditGroup(team.group || 'المجموعة أ');
@@ -242,10 +247,10 @@ export default function App() {
       await updateDoc(teamRef, {
         name: editName,
         group: editGroup,
-        pts: Number(editPts),
-        p: Number(editP),
-        gf: Number(editGf),
-        ga: Number(editGa)
+        pts: Number(editPts) || 0,
+        p: Number(editP) || 0,
+        gf: Number(editGf) || 0,
+        ga: Number(editGa) || 0
       });
       setEditingTeamId(null);
       fetchData();
@@ -255,10 +260,35 @@ export default function App() {
     }
   };
 
-  // توليد ربع النهائي أوتوماتيكياً مع حساب أفضل الثوالث عند الحاجة
+  const sortGroupTeams = (groupTeams) => {
+    if (!Array.isArray(groupTeams)) return [];
+    return groupTeams.sort((a, b) => {
+      const ptsA = Number(a?.pts) || 0;
+      const ptsB = Number(b?.pts) || 0;
+      if (ptsB !== ptsA) return ptsB - ptsA;
+
+      const directMatch = (matches || []).find(m => 
+        m && ((m.home === a?.name && m.away === b?.name) || 
+        (m.home === b?.name && m.away === a?.name))
+      );
+      if (directMatch && directMatch.homeScore !== null && directMatch.awayScore !== null && directMatch.homeScore !== undefined && directMatch.awayScore !== undefined) {
+        const aIsHome = directMatch.home === a?.name;
+        const scoreA = aIsHome ? Number(directMatch.homeScore) : Number(directMatch.awayScore);
+        const scoreB = aIsHome ? Number(directMatch.awayScore) : Number(directMatch.homeScore);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+      }
+
+      const gdA = (Number(a?.gf) || 0) - (Number(a?.ga) || 0);
+      const gdB = (Number(b?.gf) || 0) - (Number(b?.ga) || 0);
+      if (gdB !== gdA) return gdB - gdA;
+
+      return (Number(b?.gf) || 0) - (Number(a?.gf) || 0);
+    });
+  };
+
   const generateKnockoutStage = async () => {
     try {
-      const activeGroups = [...new Set(teams.map(t => t.group))].filter(Boolean);
+      const activeGroups = [...new Set((teams || []).map(t => t?.group))].filter(Boolean);
       if (activeGroups.length === 0) {
         alert("لا توجد فرق مسجلة لتوليد الأدوار الإقصائية!");
         return;
@@ -266,24 +296,22 @@ export default function App() {
 
       const groupStandings = {};
       activeGroups.forEach(g => {
-        const gTeams = teams.filter(t => t.group === g);
+        const gTeams = (teams || []).filter(t => t?.group === g);
         groupStandings[g] = sortGroupTeams([...gTeams]);
       });
 
       let qualifiedTeams = [];
 
-      // أخذ المتصدر والوصيف من كل مجموعة
       activeGroups.forEach(g => {
-        const sorted = groupStandings[g];
+        const sorted = groupStandings[g] || [];
         if (sorted[0]) qualifiedTeams.push({ team: sorted[0].name, group: g, rank: 1 });
         if (sorted[1]) qualifiedTeams.push({ team: sorted[1].name, group: g, rank: 2 });
       });
 
-      // إذا كانت البطولة بـ 3 مجموعات (6 فرق متأهلة)، نضيف أفضل 2 ثوالث لتكتمل 8 فرق لربع النهائي
       if (qualifiedTeams.length < 8) {
         let thirdPlaces = [];
         activeGroups.forEach(g => {
-          const sorted = groupStandings[g];
+          const sorted = groupStandings[g] || [];
           if (sorted[2]) {
             thirdPlaces.push({
               team: sorted[2].name,
@@ -296,7 +324,6 @@ export default function App() {
           }
         });
 
-        // ترتيب أفضل الثوالث حسب النقاط ثم فارق الأهداف ثم الأهداف له
         thirdPlaces.sort((a, b) => {
           if (b.pts !== a.pts) return b.pts - a.pts;
           if (b.gd !== a.gd) return b.gd - a.gd;
@@ -328,7 +355,7 @@ export default function App() {
       }
       await batch.commit();
       await fetchData();
-      alert("✨ تم توليد مباريات ربع النهائي أوتوماتيكياً بنجاح (مع احتساب أفضل الثوالث تلقائياً)! يمكنك تعديل أي فريق يدوياً.");
+      alert("✨ تم توليد مباريات ربع النهائي أوتوماتيكياً بنجاح!");
     } catch (err) {
       console.error("خطأ في التوليد:", err);
     }
@@ -348,9 +375,9 @@ export default function App() {
     if (window.confirm("⚠️ هل أنت متأكد من مسح جميع بيانات هذه البطولة نهائياً؟")) {
       try {
         const batch = writeBatch(db);
-        teams.forEach(t => batch.delete(doc(db, "teams", t.id)));
-        matches.forEach(m => batch.delete(doc(db, "matches", m.id)));
-        knockoutMatches.forEach(k => batch.delete(doc(db, "knockout_matches", k.id)));
+        (teams || []).forEach(t => batch.delete(doc(db, "teams", t.id)));
+        (matches || []).forEach(m => batch.delete(doc(db, "matches", m.id)));
+        (knockoutMatches || []).forEach(k => batch.delete(doc(db, "knockout_matches", k.id)));
         await batch.commit();
         localStorage.clear();
         setTeams([]);
@@ -362,31 +389,6 @@ export default function App() {
         console.error("خطأ:", err);
       }
     }
-  };
-
-  const sortGroupTeams = (groupTeams) => {
-    return groupTeams.sort((a, b) => {
-      const ptsA = Number(a.pts) || 0;
-      const ptsB = Number(b.pts) || 0;
-      if (ptsB !== ptsA) return ptsB - ptsA;
-
-      const directMatch = matches.find(m => 
-        (m.home === a.name && m.away === b.name) || 
-        (m.home === b.name && m.away === a.name)
-      );
-      if (directMatch && directMatch.homeScore !== null && directMatch.awayScore !== null) {
-        const aIsHome = directMatch.home === a.name;
-        const scoreA = aIsHome ? directMatch.homeScore : directMatch.awayScore;
-        const scoreB = aIsHome ? directMatch.awayScore : directMatch.homeScore;
-        if (scoreA !== scoreB) return scoreB - scoreA;
-      }
-
-      const gdA = (Number(a.gf) || 0) - (Number(a.ga) || 0);
-      const gdB = (Number(b.gf) || 0) - (Number(b.ga) || 0);
-      if (gdB !== gdA) return gdB - gdA;
-
-      return (Number(b.gf) || 0) - (Number(a.gf) || 0);
-    });
   };
 
   if (loading) {
@@ -431,7 +433,9 @@ export default function App() {
     );
   }
 
-  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
+  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د', 'GROUPE A', 'GROUPE B', 'GROUPE C', 'GROUPE D'];
+  const uniqueGroups = [...new Set((teams || []).map(t => t?.group))].filter(Boolean);
+  const displayGroups = uniqueGroups.length > 0 ? uniqueGroups : ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif', paddingBottom: '40px' }}>
@@ -625,7 +629,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '10px' }}>
                 <input type="text" placeholder="اسم الفريق..." value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} style={{ flex: 2, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
                 <select value={newTeamGroup} onChange={(e) => setNewTeamGroup(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}>
-                  {groupNames.map(g => <option key={g} value={g}>{g}</option>)}
+                  {groupNames.slice(0, 4).map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div>
@@ -635,7 +639,7 @@ export default function App() {
               <button type="submit" style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>إضافة الفريق</button>
             </form>
             <div>
-              {teams.map(t => (
+              {(teams || []).map(t => (
                 <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #334155', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #334155' }} />
@@ -672,23 +676,23 @@ export default function App() {
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                   <select value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
                     <option value="">اختر الفريق المضيف</option>
-                    {teams.map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
                   </select>
                   <select value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
                     <option value="">اختر الفريق الضيف</option>
-                    {teams.map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
                   </select>
                 </div>
                 <button type="submit" style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>إضافة المباراة للجولة</button>
               </form>
             )}
 
-            {matches.filter(m => m.journee === phase1Tab).length === 0 ? (
+            {(matches || []).filter(m => m && m.journee === phase1Tab).length === 0 ? (
               <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
                 لا توجد مباريات مبرمجة في {phase1Tab} حالياً. قم برمجتها من أعلى.
               </div>
             ) : (
-              matches.filter(m => m.journee === phase1Tab).map((match) => (
+              (matches || []).filter(m => m && m.journee === phase1Tab).map((match) => (
                 <div key={match.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #334155', textAlign: 'center' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <span style={{ flex: 1, fontWeight: 'bold' }}>{match.home}</span>
@@ -741,13 +745,13 @@ export default function App() {
 
       {currentView === 'phase1_classement' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
-          {teams.length === 0 ? (
+          {(teams || []).length === 0 ? (
             <div style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', border: '1px solid #334155' }}>
               لا توجد فرق مسجلة في البطولة حالياً لعرض الترتيب. قم بإضافة الفرق أولاً من قسم المشاركين.
             </div>
           ) : (
-            groupNames.map(group => {
-              const groupTeams = teams.filter(t => t.group === group);
+            displayGroups.map(group => {
+              const groupTeams = (teams || []).filter(t => t && t.group === group);
               if (groupTeams.length === 0) return null;
 
               const sortedTeams = sortGroupTeams([...groupTeams]);
@@ -857,22 +861,22 @@ export default function App() {
                   </button>
                 )}
 
-                {knockoutMatches.filter(m => m.phase === 'Quarts de finale').length === 0 ? (
+                {(knockoutMatches || []).filter(m => m && m.phase === 'Quarts de finale').length === 0 ? (
                   <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
                     لم يتم توليد مباريات ربع النهائي بعد. اضغط على الزر الأخضر أعلاه (للمشرف) لتوليدها وتوزيع الفرق أوتوماتيكياً.
                   </div>
                 ) : (
-                  knockoutMatches.filter(m => m.phase === 'Quarts de finale').map((m) => (
+                  (knockoutMatches || []).filter(m => m && m.phase === 'Quarts de finale').map((m) => (
                     <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         {role === 'admin' ? (
                           <select 
-                            value={m.home} 
+                            value={m.home || ''} 
                             onChange={(e) => updateKnockoutTeam(m.id, 'home', e.target.value)}
                             style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
                           >
                             <option value="">اختر الفريق</option>
-                            {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                           </select>
                         ) : (
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
@@ -882,12 +886,12 @@ export default function App() {
 
                         {role === 'admin' ? (
                           <select 
-                            value={m.away} 
+                            value={m.away || ''} 
                             onChange={(e) => updateKnockoutTeam(m.id, 'away', e.target.value)}
                             style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
                           >
                             <option value="">اختر الفريق</option>
-                            {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                            {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                           </select>
                         ) : (
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
