@@ -30,6 +30,7 @@ export default function App() {
 
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [knockoutMatches, setKnockoutMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [newTeamName, setNewTeamName] = useState('');
@@ -39,7 +40,6 @@ export default function App() {
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
 
-  // حالة تعديل الفريق مباشرة من جدول الترتيب
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editGroup, setEditGroup] = useState('');
@@ -57,6 +57,10 @@ export default function App() {
       const matchesSnapshot = await getDocs(collection(db, "matches"));
       const matchesList = matchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMatches(matchesList);
+
+      const koSnapshot = await getDocs(collection(db, "knockout_matches"));
+      const koList = koSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setKnockoutMatches(koList);
       
       setLoading(false);
     } catch (error) {
@@ -222,7 +226,6 @@ export default function App() {
     }
   };
 
-  // بدء التعديل اليدوي للفريق من جدول الترتيب
   const startEditingTeam = (team) => {
     setEditingTeamId(team.id);
     setEditName(team.name || '');
@@ -233,7 +236,6 @@ export default function App() {
     setEditGa(team.ga || 0);
   };
 
-  // حفظ التعديلات اليدوية للفريق
   const saveTeamChanges = async (id) => {
     try {
       const teamRef = doc(db, "teams", id);
@@ -253,16 +255,107 @@ export default function App() {
     }
   };
 
+  // توليد ربع النهائي أوتوماتيكياً مع حساب أفضل الثوالث عند الحاجة
+  const generateKnockoutStage = async () => {
+    try {
+      const activeGroups = [...new Set(teams.map(t => t.group))].filter(Boolean);
+      if (activeGroups.length === 0) {
+        alert("لا توجد فرق مسجلة لتوليد الأدوار الإقصائية!");
+        return;
+      }
+
+      const groupStandings = {};
+      activeGroups.forEach(g => {
+        const gTeams = teams.filter(t => t.group === g);
+        groupStandings[g] = sortGroupTeams([...gTeams]);
+      });
+
+      let qualifiedTeams = [];
+
+      // أخذ المتصدر والوصيف من كل مجموعة
+      activeGroups.forEach(g => {
+        const sorted = groupStandings[g];
+        if (sorted[0]) qualifiedTeams.push({ team: sorted[0].name, group: g, rank: 1 });
+        if (sorted[1]) qualifiedTeams.push({ team: sorted[1].name, group: g, rank: 2 });
+      });
+
+      // إذا كانت البطولة بـ 3 مجموعات (6 فرق متأهلة)، نضيف أفضل 2 ثوالث لتكتمل 8 فرق لربع النهائي
+      if (qualifiedTeams.length < 8) {
+        let thirdPlaces = [];
+        activeGroups.forEach(g => {
+          const sorted = groupStandings[g];
+          if (sorted[2]) {
+            thirdPlaces.push({
+              team: sorted[2].name,
+              group: g,
+              rank: 3,
+              pts: Number(sorted[2].pts) || 0,
+              gd: (Number(sorted[2].gf) || 0) - (Number(sorted[2].ga) || 0),
+              gf: Number(sorted[2].gf) || 0
+            });
+          }
+        });
+
+        // ترتيب أفضل الثوالث حسب النقاط ثم فارق الأهداف ثم الأهداف له
+        thirdPlaces.sort((a, b) => {
+          if (b.pts !== a.pts) return b.pts - a.pts;
+          if (b.gd !== a.gd) return b.gd - a.gd;
+          return b.gf - a.gf;
+        });
+
+        const needed = 8 - qualifiedTeams.length;
+        for (let i = 0; i < needed && i < thirdPlaces.length; i++) {
+          qualifiedTeams.push(thirdPlaces[i]);
+        }
+      }
+
+      if (qualifiedTeams.length < 4) {
+        alert("عدد الفرق المتأهلة غير كافٍ!");
+        return;
+      }
+
+      const defaultQuarts = [
+        { id: 'q1', phase: 'Quarts de finale', index: 0, home: qualifiedTeams[0]?.team || '', away: qualifiedTeams[7]?.team || qualifiedTeams[3]?.team || '', homeScore: null, awayScore: null },
+        { id: 'q2', phase: 'Quarts de finale', index: 1, home: qualifiedTeams[1]?.team || '', away: qualifiedTeams[6]?.team || qualifiedTeams[2]?.team || '', homeScore: null, awayScore: null },
+        { id: 'q3', phase: 'Quarts de finale', index: 2, home: qualifiedTeams[2]?.team || '', away: qualifiedTeams[5]?.team || qualifiedTeams[1]?.team || '', homeScore: null, awayScore: null },
+        { id: 'q4', phase: 'Quarts de finale', index: 3, home: qualifiedTeams[3]?.team || '', away: qualifiedTeams[4]?.team || qualifiedTeams[0]?.team || '', homeScore: null, awayScore: null }
+      ];
+
+      const batch = writeBatch(db);
+      for (const q of defaultQuarts) {
+        const ref = doc(db, "knockout_matches", q.id);
+        batch.set(ref, q);
+      }
+      await batch.commit();
+      await fetchData();
+      alert("✨ تم توليد مباريات ربع النهائي أوتوماتيكياً بنجاح (مع احتساب أفضل الثوالث تلقائياً)! يمكنك تعديل أي فريق يدوياً.");
+    } catch (err) {
+      console.error("خطأ في التوليد:", err);
+    }
+  };
+
+  const updateKnockoutTeam = async (matchId, field, value) => {
+    try {
+      const ref = doc(db, "knockout_matches", matchId);
+      await updateDoc(ref, { [field]: value });
+      fetchData();
+    } catch (err) {
+      console.error("خطأ في تحديث الفريق الإقصائي:", err);
+    }
+  };
+
   const handleResetTournament = async () => {
     if (window.confirm("⚠️ هل أنت متأكد من مسح جميع بيانات هذه البطولة نهائياً؟")) {
       try {
         const batch = writeBatch(db);
         teams.forEach(t => batch.delete(doc(db, "teams", t.id)));
         matches.forEach(m => batch.delete(doc(db, "matches", m.id)));
+        knockoutMatches.forEach(k => batch.delete(doc(db, "knockout_matches", k.id)));
         await batch.commit();
         localStorage.clear();
         setTeams([]);
         setMatches([]);
+        setKnockoutMatches([]);
         alert("تم مسح البطولة بنجاح!");
         window.location.reload();
       } catch (err) {
@@ -419,15 +512,15 @@ export default function App() {
               >
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT (مع زر التعديل المباشر)</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات مع إمكانية تعديل النقاط مباشرة</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>CLASSEMENT</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب المجموعات وتعديل النقاط والأسماء</div>
                 </div>
               </div>
             </>
           )}
 
           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '20px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 2 (الأدوار الإقصائية المنظمة)
+            Phase 2 (الأدوار الإقصائية والقرعة)
           </div>
 
           <div 
@@ -437,7 +530,7 @@ export default function App() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>مباريات خروج المغلوب منظمة بعيدة عن المجموعات</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد ربع النهائي أوتوماتيكياً (مع أفضل الثوالث) وتغيير الفرق يدوياً</div>
             </div>
           </div>
 
@@ -755,21 +848,55 @@ export default function App() {
           <div style={{ padding: '15px' }}>
             {phase2Tab === 'Quarts de finale' && (
               <>
-                {[
-                  { home: 'متصدر المجموعة أ', away: 'وصيف المجموعة ب' },
-                  { home: 'متصدر المجموعة ب', away: 'أفضل ثالث' },
-                  { home: 'متصدر المجموعة ج', away: 'وصيف المجموعة أ' },
-                  { home: 'متصدر المجموعة د', away: 'وصيف المجموعة ج' }
-                ].map((m, idx) => (
-                  <div key={idx} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home}</span>
-                      <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>- : -</div>
-                      <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away}</span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم بمعزل عن دور المجموعات</div>
+                {role === 'admin' && (
+                  <button 
+                    onClick={generateKnockoutStage}
+                    style={{ width: '100%', background: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer' }}
+                  >
+                    ⚡ توليد مباريات ربع النهائي أوتوماتيكياً (مع أفضل الثوالث)
+                  </button>
+                )}
+
+                {knockoutMatches.filter(m => m.phase === 'Quarts de finale').length === 0 ? (
+                  <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
+                    لم يتم توليد مباريات ربع النهائي بعد. اضغط على الزر الأخضر أعلاه (للمشرف) لتوليدها وتوزيع الفرق أوتوماتيكياً.
                   </div>
-                ))}
+                ) : (
+                  knockoutMatches.filter(m => m.phase === 'Quarts de finale').map((m) => (
+                    <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '12px', border: '1px solid #334155', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.home} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'home', e.target.value)}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
+                          >
+                            <option value="">اختر الفريق</option>
+                            {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
+                        )}
+
+                        <div style={{ padding: '5px 15px', background: '#0f172a', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8', margin: '0 8px' }}>- : -</div>
+
+                        {role === 'admin' ? (
+                          <select 
+                            value={m.away} 
+                            onChange={(e) => updateKnockoutTeam(m.id, 'away', e.target.value)}
+                            style={{ flex: 1, padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
+                          >
+                            <option value="">اختر الفريق</option>
+                            {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يمكنك تعديل أي فريق يدوياً عبر القائمة)</div>
+                    </div>
+                  ))
+                )}
               </>
             )}
 
