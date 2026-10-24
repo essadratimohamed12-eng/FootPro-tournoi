@@ -116,6 +116,19 @@ export default function App() {
     }
   };
 
+  // حذف مباراة نهائياً
+  const handleDeleteMatch = async (matchId) => {
+    if (window.confirm("⚠️ هل أنت متأكد من حذف هذه المباراة؟")) {
+      try {
+        await deleteDoc(doc(db, "matches", matchId));
+        fetchData();
+        alert("تم حذف المباراة بنجاح!");
+      } catch (err) {
+        console.error("خطأ في حذف المباراة:", err);
+      }
+    }
+  };
+
   const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -331,7 +344,7 @@ export default function App() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>POINTS (المباريات حسب الجولات)</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض وجدولة مباريات Journée 1, 2, 3</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>عرض وجدولة وتعديل وحذف مباريات الجولات</div>
                 </div>
               </div>
 
@@ -514,7 +527,7 @@ export default function App() {
 
             {matches.filter(m => m.journee === phase1Tab).length === 0 ? (
               <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                لا توجد مباريات مبرمجة في {phase1Tab} حالياً.
+                لا توجد مباريات مبرمجة في {phase1Tab} حالياً. قم برمجتها من أعلى.
               </div>
             ) : (
               matches.filter(m => m.journee === phase1Tab).map((match) => (
@@ -538,16 +551,24 @@ export default function App() {
                         style={{ width: '40px', textAlign: 'center', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
                       />
                       {role === 'admin' && (
-                        <button 
-                          onClick={() => {
-                            const h = document.getElementById(`h-${match.id}`).value;
-                            const a = document.getElementById(`a-${match.id}`).value;
-                            handleUpdateScore(match, h, a);
-                          }}
-                          style={{ background: '#10b981', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
-                        >
-                          حفظ
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => {
+                              const h = document.getElementById(`h-${match.id}`).value;
+                              const a = document.getElementById(`a-${match.id}`).value;
+                              handleUpdateScore(match, h, a);
+                            }}
+                            style={{ background: '#10b981', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
+                          >
+                            حفظ
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteMatch(match.id)}
+                            style={{ background: '#ef4444', border: 'none', padding: '6px 8px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
+                          >
+                            حذف
+                          </button>
+                        </>
                       )}
                     </div>
                     <span style={{ flex: 1, fontWeight: 'bold' }}>{match.away}</span>
