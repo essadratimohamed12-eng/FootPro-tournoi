@@ -10,14 +10,17 @@ import {
 import { db } from './firebase';
 
 export default function App() {
+  // نظام تسجيل الدخول (مشرف / مشاهد)
+  const [role, setRole] = useState(null); // 'admin' أو 'viewer'
+  const [passwordInput, setPasswordInput] = useState('');
+
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // إعدادات إنشاء بطولة جديدة
-  const [tournamentName, setTournamentName] = useState('');
-  const [tournamentType, setTournamentType] = useState('world_cup'); 
-  const [matchFormat, setMatchFormat] = useState('home_away'); 
+  // إضافات جديدة للفرق والمباريات (خاص بالمشرف)
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamGroup, setNewTeamGroup] = useState('المجموعة أ');
 
   const fetchData = async () => {
     try {
@@ -40,6 +43,54 @@ export default function App() {
     fetchData();
   }, []);
 
+  // تسجيل الدخول بكلمة المرور
+  const handleLogin = (selectedRole) => {
+    if (selectedRole === 'admin') {
+      if (passwordInput === 'admin123') {
+        setRole('admin');
+      } else {
+        alert('كلمة مرور المشرف غير صحيحة!');
+      }
+    } else if (selectedRole === 'viewer') {
+      if (passwordInput === 'viewer123' || passwordInput === '') {
+        setRole('viewer');
+      } else {
+        alert('كلمة مرور المشاهد غير صحيحة!');
+      }
+    }
+    setPasswordInput('');
+  };
+
+  // إضافة فريق جديد
+  const handleAddTeam = async (e) => {
+    e.preventDefault();
+    if (!newTeamName.trim()) return;
+
+    try {
+      await addDoc(collection(db, "teams"), {
+        name: newTeamName,
+        group: newTeamGroup,
+        p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
+      });
+      setNewTeamName('');
+      fetchData();
+    } catch (error) {
+      console.error("خطأ في إضافة الفريق:", error);
+    }
+  };
+
+  const handleDeleteTeam = async (id) => {
+    if (window.confirm("هل أنت متأكد من حذف هذا الفريق؟")) {
+      try {
+        await deleteDoc(doc(db, "teams", id));
+        fetchData();
+      } catch (error) {
+        console.error("خطأ في الحذف:", error);
+      }
+    }
+  };
+
+  // تحديث النتيجة
   const handleUpdateScore = async (match, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -93,21 +144,9 @@ export default function App() {
       }
 
       await fetchData();
-      alert("تم تسجيل النتيجة وتحديث الترتيب أوتوماتيكياً بنجاح! 🏆");
+      alert("تم تسجيل النتيجة وتحديث الترتيب أوتوماتيكياً! 🏆");
     } catch (error) {
       console.error("خطأ في تحديث النتيجة:", error);
-      alert("حدث خطأ أثناء حفظ النتيجة.");
-    }
-  };
-
-  const handleDeleteMatch = async (id) => {
-    if (window.confirm("هل أنت متأكد من حذف هذه المباراة؟")) {
-      try {
-        await deleteDoc(doc(db, "matches", id));
-        fetchData();
-      } catch (error) {
-        console.error("خطأ في الحذف:", error);
-      }
     }
   };
 
@@ -115,44 +154,82 @@ export default function App() {
     return <div style={{ color: '#fff', textAlign: 'center', marginTop: '50px' }}>جاري تحميل البيانات...</div>;
   }
 
+  // شاشة تسجيل الدخول
+  if (!role) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0b0f19', color: '#fff', fontFamily: 'Cairo, sans-serif' }}>
+        <div style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', width: '350px', textAlign: 'center', border: '1px solid #334155' }}>
+          <h1 style={{ marginBottom: '20px', color: '#38bdf8' }}>FootPro ⚽</h1>
+          <input 
+            type="password" 
+            placeholder="أدخل كلمة المرور..." 
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            style={{ width: '100%', padding: '10px', marginBottom: '15px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff', textAlign: 'center' }}
+          />
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => handleLogin('admin')}
+              style={{ flex: 1, background: '#0284c7', border: 'none', padding: '10px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              دخول مشرف (Admin)
+            </button>
+            <button 
+              onClick={() => handleLogin('viewer')}
+              style={{ flex: 1, background: '#334155', border: 'none', padding: '10px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              دخول مشاهد (Viewer)
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '15px' }}>كلمة مرور المشرف الافتراضية: admin123</p>
+        </div>
+      </div>
+    );
+  }
+
+  // تصفية المجموعات
+  const groupNames = ['المجموعة أ', 'المجموعة ب', 'المجموعة ج', 'المجموعة د'];
   const knockoutMatches = matches.filter(m => m.stage && m.stage !== 'مجموعات');
 
   return (
     <div style={{ padding: '20px', color: '#fff', backgroundColor: '#0b0f19', minHeight: '100vh', fontFamily: 'Cairo, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>إدارة بطولات كرة القدم - FootPro ⚽</h1>
-      
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+        <h1 style={{ fontSize: '24px' }}>إدارة بطولات كرة القدم - FootPro ⚽ ({role === 'admin' ? 'مشرف' : 'مشاهد'})</h1>
+        <button 
+          onClick={() => setRole(null)}
+          style={{ background: '#ef4444', border: 'none', padding: '8px 15px', borderRadius: '6px', color: '#fff', cursor: 'pointer' }}
+        >
+          تسجيل الخروج
+        </button>
+      </div>
+
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         
-        {/* إعدادات البطولة */}
-        <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #334155' }}>
-          <h2 style={{ fontSize: '18px', marginBottom: '15px', color: '#38bdf8' }}>⚙️ إعدادات شكل ونظام البطولة</h2>
-          
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px' }}>اسم البطولة:</label>
-            <input 
-              type="text" 
-              placeholder="مثال: دوري الأصدقاء 2026" 
-              value={tournamentName}
-              onChange={(e) => setTournamentName(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-            />
+        {/* إضافة فريق (خاص بالمشرف فقط) */}
+        {role === 'admin' && (
+          <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #334155' }}>
+            <h2 style={{ fontSize: '16px', marginBottom: '15px', color: '#38bdf8' }}>➕ إضافة فريق جديد للمجموعات</h2>
+            <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '10px' }}>
+              <input 
+                type="text" 
+                placeholder="اسم الفريق..." 
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                style={{ flex: 2, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+              />
+              <select 
+                value={newTeamGroup}
+                onChange={(e) => setNewTeamGroup(e.target.value)}
+                style={{ flex: 1, padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+              >
+                {groupNames.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <button type="submit" style={{ background: '#06b6d4', border: 'none', padding: '10px 20px', borderRadius: '6px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>إضافة</button>
+            </form>
           </div>
+        )}
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px' }}>اختر نظام البطولة:</label>
-            <select 
-              value={tournamentType}
-              onChange={(e) => setTournamentType(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-            >
-              <option value="world_cup">شكل كأس العالم (دور المجموعات + أفضل الثوالث + الأدوار الإقصائية)</option>
-              <option value="ucl_new">دوري أبطال أوروبا الجديد (دوري واحد + الإقصائيات)</option>
-              <option value="league">دوري عادي (مجموعات بدون إقصائيات)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* شجرة الأدوار الإقصائية المرئية */}
+        {/* 🌟 شجرة الأدوار الإقصائية المرئية (Path to Final) */}
         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '40px', border: '1px solid #334155' }}>
           <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px' }}>🌟 مسار الأدوار الإقصائية (Path to Final)</h2>
           {knockoutMatches.length === 0 ? (
@@ -161,7 +238,7 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {knockoutMatches.map((km) => (
                 <div key={km.id} style={{ background: '#0f172a', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155' }}>
-                  <span style={{ fontSize: '12px', background: '#0284c7', padding: '3px 8px', borderRadius: '4px' }}>{km.stage || 'إقصائيات'}</span>
+                  <span style={{ fontSize: '12px', background: '#0284c7', padding: '3px 8px', borderRadius: '4px' }}>{km.stage}</span>
                   <span style={{ width: '25%', textAlign: 'right', fontWeight: 'bold' }}>{km.home}</span>
                   <div style={{ background: '#1e293b', padding: '5px 15px', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>
                     {km.homeScore ?? '-'} : {km.awayScore ?? '-'}
@@ -173,111 +250,107 @@ export default function App() {
           )}
         </div>
 
-        {/* المباريات والنتائج */}
-        <h2>المباريات والنتائج العامة</h2>
+        {/* جداول دور المجموعات منفصلة */}
+        <h2 style={{ marginBottom: '20px' }}>🏆 جداول ترتيب دور المجموعات</h2>
+        {groupNames.map((group) => {
+          const groupTeams = teams.filter(t => t.group === group);
+          if (groupTeams.length === 0) return null;
+
+          return (
+            <div key={group} style={{ marginBottom: '30px', background: '#1e293b', borderRadius: '12px', padding: '15px', border: '1px solid #334155' }}>
+              <h3 style={{ color: '#38bdf8', marginBottom: '10px' }}>{group}</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#334155', textAlign: 'center', fontSize: '14px' }}>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>الفريق</th>
+                    <th>لعب</th>
+                    <th>فاز</th>
+                    <th>تعادل</th>
+                    <th>خسر</th>
+                    <th>له</th>
+                    <th>عليه</th>
+                    <th>الفرق</th>
+                    <th>النقاط</th>
+                    {role === 'admin' && <th>إجراءات</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupTeams.sort((a, b) => {
+                    const ptsA = Number(a.pts) || 0;
+                    const ptsB = Number(b.pts) || 0;
+                    if (ptsB !== ptsA) return ptsB - ptsA;
+
+                    const gdA = (Number(a.gf) || 0) - (Number(a.ga) || 0);
+                    const gdB = (Number(b.gf) || 0) - (Number(b.ga) || 0);
+                    if (gdB !== gdA) return gdB - gdA;
+
+                    return (Number(b.gf) || 0) - (Number(a.gf) || 0);
+                  }).map((team) => {
+                    const goalDiff = (Number(team.gf) || 0) - (Number(team.ga) || 0);
+                    return (
+                      <tr key={team.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>{team.name}</td>
+                        <td>{team.p || 0}</td>
+                        <td>{team.w || 0}</td>
+                        <td>{team.d || 0}</td>
+                        <td>{team.l || 0}</td>
+                        <td>{team.gf || 0}</td>
+                        <td>{team.ga || 0}</td>
+                        <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>
+                          {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
+                        </td>
+                        <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{team.pts || 0}</td>
+                        {role === 'admin' && (
+                          <td>
+                            <button onClick={() => handleDeleteTeam(team.id)} style={{ background: '#ef4444', border: 'none', padding: '3px 8px', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '11px' }}>حذف</button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+
+        {/* قسم المباريات */}
+        <h2 style={{ marginTop: '40px', marginBottom: '15px' }}>⚽ المباريات والنتائج</h2>
         {matches.map((match) => (
-          <div key={match.id} style={{ background: '#1e293b', padding: '15px', marginBottom: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ width: '30%', textAlign: 'right' }}>{match.home}</span>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div key={match.id} style={{ background: '#1e293b', padding: '15px', marginBottom: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155' }}>
+            <span style={{ width: '30%', textAlign: 'right', fontWeight: 'bold' }}>{match.home}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <input 
                 type="number" 
                 defaultValue={match.homeScore ?? ''} 
                 id={`h-${match.id}`} 
-                style={{ width: '40px', textAlign: 'center', marginRight: '5px', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155' }} 
+                disabled={role !== 'admin'}
+                style={{ width: '45px', textAlign: 'center', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
               />
-              -
+              <span>-</span>
               <input 
                 type="number" 
                 defaultValue={match.awayScore ?? ''} 
                 id={`a-${match.id}`} 
-                style={{ width: '40px', textAlign: 'center', marginLeft: '5px', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155' }} 
+                disabled={role !== 'admin'}
+                style={{ width: '45px', textAlign: 'center', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
               />
-              <button 
-                onClick={() => {
-                  const h = document.getElementById(`h-${match.id}`).value;
-                  const a = document.getElementById(`a-${match.id}`).value;
-                  handleUpdateScore(match, h, a);
-                }}
-                style={{ marginLeft: '10px', background: '#06b6d4', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold' }}
-              >
-                حفظ
-              </button>
+              {role === 'admin' && (
+                <button 
+                  onClick={() => {
+                    const h = document.getElementById(`h-${match.id}`).value;
+                    const a = document.getElementById(`a-${match.id}`).value;
+                    handleUpdateScore(match, h, a);
+                  }}
+                  style={{ background: '#06b6d4', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold' }}
+                >
+                  حفظ
+                </button>
+              )}
             </div>
-            <span style={{ width: '30%', textAlign: 'left' }}>{match.away}</span>
-            <button 
-              onClick={() => handleDeleteMatch(match.id)}
-              style={{ background: '#ef4444', border: 'none', padding: '5px 8px', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}
-            >
-              حذف
-            </button>
+            <span style={{ width: '30%', textAlign: 'left', fontWeight: 'bold' }}>{match.away}</span>
           </div>
         ))}
-
-        {/* الترتيب الاحترافي بالمواجهات المباشرة والمعايير */}
-        <h2 style={{ marginTop: '40px' }}>ترتيب المجموعات (مع حساب أفضل الثوالث والمعايير الاحترافية)</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#1e293b', borderRadius: '8px', overflow: 'hidden' }}>
-          <thead>
-            <tr style={{ background: '#334155', textAlign: 'center' }}>
-              <th style={{ padding: '10px' }}>الفريق</th>
-              <th>لعب</th>
-              <th>فاز</th>
-              <th>تعادل</th>
-              <th>خسر</th>
-              <th>له</th>
-              <th>عليه</th>
-              <th>الفرق</th>
-              <th>النقاط</th>
-            </tr>
-          </thead>
-          <tbody>
-            {teams.sort((a, b) => {
-              const ptsA = Number(a.pts) || 0;
-              const ptsB = Number(b.pts) || 0;
-              if (ptsB !== ptsA) return ptsB - ptsA;
-
-              const directMatch = matches.find(m => 
-                (m.homeId === a.id && m.awayId === b.id) || 
-                (m.homeId === b.id && m.awayId === a.id) ||
-                (m.home?.trim() === a.name?.trim() && m.away?.trim() === b.name?.trim()) ||
-                (m.home?.trim() === b.name?.trim() && m.away?.trim() === a.name?.trim())
-              );
-
-              if (directMatch && directMatch.status === 'انتهت' && directMatch.homeScore !== undefined && directMatch.awayScore !== undefined) {
-                const isAHome = (directMatch.homeId === a.id || directMatch.home?.trim() === a.name?.trim());
-                const scoreA = isAHome ? Number(directMatch.homeScore) : Number(directMatch.awayScore);
-                const scoreB = isAHome ? Number(directMatch.awayScore) : Number(directMatch.homeScore);
-                if (scoreA !== scoreB) {
-                  return scoreB - scoreA;
-                }
-              }
-
-              const gdA = (Number(a.gf) || 0) - (Number(a.ga) || 0);
-              const gdB = (Number(b.gf) || 0) - (Number(b.ga) || 0);
-              if (gdB !== gdA) return gdB - gdA;
-
-              const gfA = Number(a.gf) || 0;
-              const gfB = Number(b.gf) || 0;
-              return gfB - gfA;
-            }).map((team) => {
-              const goalDiff = (Number(team.gf) || 0) - (Number(team.ga) || 0);
-              return (
-                <tr key={team.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>{team.name}</td>
-                  <td>{team.p || 0}</td>
-                  <td>{team.w || 0}</td>
-                  <td>{team.d || 0}</td>
-                  <td>{team.l || 0}</td>
-                  <td>{team.gf || 0}</td>
-                  <td>{team.ga || 0}</td>
-                  <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>
-                    {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
-                  </td>
-                  <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{team.pts || 0}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </div>
     </div>
   );
