@@ -47,7 +47,6 @@ class ErrorBoundary extends React.Component {
 function MainApp() {
   const [role, setRole] = useState(null);
   
-  // كلمات المرور مرتبطة بقاعدة البيانات Firebase لتجتنب مشاكل الأجهزة المختلفة
   const [adminPassword, setAdminPassword] = useState('admin123');
   const [viewerPassword, setViewerPassword] = useState('viewer123');
   
@@ -86,7 +85,6 @@ function MainApp() {
 
   const fetchData = async () => {
     try {
-      // جلب إعدادات الكودات والبطولة من Firebase
       const settingsDoc = await getDoc(doc(db, "settings", "tournament_config"));
       if (settingsDoc.exists()) {
         const data = settingsDoc.data();
@@ -298,7 +296,7 @@ function MainApp() {
     if (!team) return;
     setEditingTeamId(team.id);
     setEditName(team.name || '');
-    setEditGroup(team.group || 'المجموعة أ');
+    setEditGroup(team.group || 'عام');
     setEditPts(team.pts || 0);
     setEditP(team.p || 0);
     setEditGf(team.gf || 0);
@@ -350,86 +348,107 @@ function MainApp() {
     });
   };
 
+  // توليد الأدوار الإقصائية (سواء بنظام المجموعات، أو النظام الموحد ucl_league، أو إقصائية فقط)
   const generateKnockoutStage = async () => {
     try {
-      const activeGroups = [...new Set((teams || []).map(t => t?.group))].filter(Boolean);
-      if (activeGroups.length === 0) {
-        alert("لا توجد فرق مسجلة لتوليد الأدوار الإقصائية!");
-        return;
-      }
-
-      const groupStandings = {};
-      activeGroups.forEach(g => {
-        const gTeams = (teams || []).filter(t => t?.group === g);
-        groupStandings[g] = sortGroupTeams([...gTeams]);
-      });
-
       let qualifiedTeams = [];
 
-      activeGroups.forEach(g => {
-        const sorted = groupStandings[g] || [];
-        if (sorted[0]) qualifiedTeams.push({ team: sorted[0].name, group: g, rank: 1 });
-        if (sorted[1]) qualifiedTeams.push({ team: sorted[1].name, group: g, rank: 2 });
-      });
+      if (tournamentSystem === 'knockout_only') {
+        qualifiedTeams = (teams || []).map(t => ({ team: t.name, group: 'عام', rank: 1 }));
+      } else if (tournamentSystem === 'ucl_league') {
+        // نظام دوري الأبطال الجديد: جدول موحد لجميع الفرق، ويتاهل الأوائل (مثلاً الـ 8 الاوائل أو النصف)
+        const sortedAll = sortGroupTeams([...teams]);
+        const targetCount = sortedAll.length >= 16 ? 8 : (sortedAll.length >= 8 ? 4 : 2);
+        qualifiedTeams = sortedAll.slice(0, targetCount).map((t, idx) => ({ team: t.name, group: 'الدوري الموحد', rank: idx + 1 }));
+      } else {
+        const activeGroups = [...new Set((teams || []).map(t => t?.group))].filter(Boolean);
+        if (activeGroups.length === 0) {
+          alert("لا توجد فرق مسجلة لتوليد الأدوار الإقصائية!");
+          return;
+        }
 
-      if (qualifiedTeams.length < 8) {
-        let thirdPlaces = [];
+        const groupStandings = {};
+        activeGroups.forEach(g => {
+          const gTeams = (teams || []).filter(t => t?.group === g);
+          groupStandings[g] = sortGroupTeams([...gTeams]);
+        });
+
         activeGroups.forEach(g => {
           const sorted = groupStandings[g] || [];
-          if (sorted[2]) {
-            thirdPlaces.push({
-              team: sorted[2].name,
-              group: g,
-              rank: 3,
-              pts: Number(sorted[2].pts) || 0,
-              gd: (Number(sorted[2].gf) || 0) - (Number(sorted[2].ga) || 0),
-              gf: Number(sorted[2].gf) || 0
-            });
+          if (sorted[0]) qualifiedTeams.push({ team: sorted[0].name, group: g, rank: 1 });
+          if (sorted[1]) qualifiedTeams.push({ team: sorted[1].name, group: g, rank: 2 });
+        });
+
+        if (qualifiedTeams.length < 8) {
+          let thirdPlaces = [];
+          activeGroups.forEach(g => {
+            const sorted = groupStandings[g] || [];
+            if (sorted[2]) {
+              thirdPlaces.push({
+                team: sorted[2].name,
+                group: g,
+                rank: 3,
+                pts: Number(sorted[2].pts) || 0,
+                gd: (Number(sorted[2].gf) || 0) - (Number(sorted[2].ga) || 0),
+                gf: Number(sorted[2].gf) || 0
+              });
+            }
+          });
+
+          thirdPlaces.sort((a, b) => {
+            if (b.pts !== a.pts) return b.pts - a.pts;
+            if (b.gd !== a.gd) return b.gd - a.gd;
+            return b.gf - a.gf;
+          });
+
+          const needed = 8 - qualifiedTeams.length;
+          for (let i = 0; i < needed && i < thirdPlaces.length; i++) {
+            qualifiedTeams.push(thirdPlaces[i]);
           }
-        });
-
-        thirdPlaces.sort((a, b) => {
-          if (b.pts !== a.pts) return b.pts - a.pts;
-          if (b.gd !== a.gd) return b.gd - a.gd;
-          return b.gf - a.gf;
-        });
-
-        const needed = 8 - qualifiedTeams.length;
-        for (let i = 0; i < needed && i < thirdPlaces.length; i++) {
-          qualifiedTeams.push(thirdPlaces[i]);
         }
       }
 
-      if (qualifiedTeams.length < 4) {
-        alert("عدد الفرق المتأهلة غير كافٍ!");
+      if (qualifiedTeams.length < 2) {
+        alert("عدد الفرق غير كافٍ لتوليد مباريات إقصائية!");
         return;
       }
 
-      const defaultQuarts = [
-        { id: 'q1', phase: 'Quarts de finale', index: 0, home: qualifiedTeams[0]?.team || '', away: qualifiedTeams[7]?.team || qualifiedTeams[3]?.team || '', homeScore: null, awayScore: null },
-        { id: 'q2', phase: 'Quarts de finale', index: 1, home: qualifiedTeams[1]?.team || '', away: qualifiedTeams[6]?.team || qualifiedTeams[2]?.team || '', homeScore: null, awayScore: null },
-        { id: 'q3', phase: 'Quarts de finale', index: 2, home: qualifiedTeams[2]?.team || '', away: qualifiedTeams[5]?.team || qualifiedTeams[1]?.team || '', homeScore: null, awayScore: null },
-        { id: 'q4', phase: 'Quarts de finale', index: 3, home: qualifiedTeams[3]?.team || '', away: qualifiedTeams[4]?.team || qualifiedTeams[0]?.team || '', homeScore: null, awayScore: null }
-      ];
+      let defaultRound = [];
+      let firstRoundPhase = 'Quarts de finale';
+
+      if (qualifiedTeams.length <= 4) {
+        firstRoundPhase = 'Demi-finales';
+        defaultRound = [
+          { id: 'd1', phase: 'Demi-finales', index: 0, home: qualifiedTeams[0]?.team || '', away: qualifiedTeams[3]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null },
+          { id: 'd2', phase: 'Demi-finales', index: 1, home: qualifiedTeams[1]?.team || '', away: qualifiedTeams[2]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null }
+        ];
+      } else {
+        defaultRound = [
+          { id: 'q1', phase: 'Quarts de finale', index: 0, home: qualifiedTeams[0]?.team || '', away: qualifiedTeams[7]?.team || qualifiedTeams[3]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null },
+          { id: 'q2', phase: 'Quarts de finale', index: 1, home: qualifiedTeams[1]?.team || '', away: qualifiedTeams[6]?.team || qualifiedTeams[2]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null },
+          { id: 'q3', phase: 'Quarts de finale', index: 2, home: qualifiedTeams[2]?.team || '', away: qualifiedTeams[5]?.team || qualifiedTeams[1]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null },
+          { id: 'q4', phase: 'Quarts de finale', index: 3, home: qualifiedTeams[3]?.team || '', away: qualifiedTeams[4]?.team || qualifiedTeams[0]?.team || '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null }
+        ];
+      }
 
       const defaultDemis = [
-        { id: 'd1', phase: 'Demi-finales', index: 0, home: '', away: '', homeScore: null, awayScore: null },
-        { id: 'd2', phase: 'Demi-finales', index: 1, home: '', away: '', homeScore: null, awayScore: null }
+        { id: 'd1', phase: 'Demi-finales', index: 0, home: '', away: '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null },
+        { id: 'd2', phase: 'Demi-finales', index: 1, home: '', away: '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null }
       ];
 
       const defaultFinale = [
-        { id: 'f1', phase: 'Finale', index: 0, home: '', away: '', homeScore: null, awayScore: null }
+        { id: 'f1', phase: 'Finale', index: 0, home: '', away: '', homeScoreAller: null, awayScoreAller: null, homeScoreRetour: null, awayScoreRetour: null }
       ];
 
       const batch = writeBatch(db);
-      [...defaultQuarts, ...defaultDemis, ...defaultFinale].forEach(item => {
+      [...defaultRound, ...defaultDemis, ...defaultFinale].forEach(item => {
         const ref = doc(db, "knockout_matches", item.id);
         batch.set(ref, item);
       });
 
       await batch.commit();
       await fetchData();
-      alert("✨ تم توليد جميع الأدوار الإقصائية (ربع، نصف، ونهائي) أوتوماتيكياً بنجاح!");
+      alert("✨ تم توليد الأدوار الإقصائية أوتوماتيكياً بنجاح!");
     } catch (err) {
       console.error("خطأ في التوليد:", err);
     }
@@ -445,20 +464,19 @@ function MainApp() {
     }
   };
 
-  const updateKnockoutScore = async (matchId, hScore, aScore) => {
-    const hs = parseInt(hScore);
-    const as = parseInt(aScore);
-
-    if (isNaN(hs) || isNaN(as)) {
-      alert("المرجو إدخال أرقام صحيحة في النتيجة!");
-      return;
-    }
+  const updateKnockoutScore = async (matchId, hAller, aAller, hRetour, aRetour) => {
+    const ha = parseInt(hAller) || 0;
+    const aa = parseInt(aAller) || 0;
+    const hr = matchLegs === 'aller_retour' ? (parseInt(hRetour) || 0) : 0;
+    const ar = matchLegs === 'aller_retour' ? (parseInt(aRetour) || 0) : 0;
 
     try {
       const ref = doc(db, "knockout_matches", matchId);
       await setDoc(ref, {
-        homeScore: hs,
-        awayScore: as
+        homeScoreAller: ha,
+        awayScoreAller: aa,
+        homeScoreRetour: hr,
+        awayScoreRetour: ar
       }, { merge: true });
 
       const koSnapshot = await getDocs(collection(db, "knockout_matches"));
@@ -467,10 +485,23 @@ function MainApp() {
       const winnerOf = (id) => {
         const m = currentKo.find(item => item.id === id);
         if (!m) return '';
-        const curHs = (m.id === matchId) ? hs : m.homeScore;
-        const curAs = (m.id === matchId) ? as : m.awayScore;
-        if (curHs === null || curAs === null || curHs === undefined || curAs === undefined) return '';
-        return Number(curHs) >= Number(curAs) ? m.home : m.away;
+        
+        let curHa = (m.id === matchId) ? ha : (m.homeScoreAller ?? 0);
+        let curAa = (m.id === matchId) ? aa : (m.awayScoreAller ?? 0);
+        let curHr = (m.id === matchId) ? hr : (m.homeScoreRetour ?? 0);
+        let curAr = (m.id === matchId) ? ar : (m.awayScoreRetour ?? 0);
+
+        let totalHome = curHa;
+        let totalAway = curAa;
+        if (matchLegs === 'aller_retour') {
+          totalHome = curHa + curAr;
+          totalAway = curAa + curHr;
+        }
+
+        if (totalHome === totalAway) {
+          return m.home;
+        }
+        return totalHome > totalAway ? m.home : m.away;
       };
 
       if (['q1', 'q2', 'q3', 'q4'].includes(matchId)) {
@@ -504,7 +535,7 @@ function MainApp() {
       }
 
       await fetchData();
-      alert("تم حفظ النتيجة وتأهل الفريق للدور الموالي بنجاح! 🏆");
+      alert("تم حفظ النتيجة وتأهل الفريق الفائز إلى الدور الموالي أوتوماتيكياً! 🏆");
     } catch (err) {
       console.error("خطأ في حفظ النتيجة:", err);
       alert("حدث خطأ أثناء حفظ النتيجة.");
@@ -616,7 +647,7 @@ function MainApp() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏆</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>INFOS SUR LE TOURNOI</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات ونظام البطولة وكلمات المرور</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إعدادات ونظام البطولة (دوري، مجموعات، إقصائيات)</div>
                 </div>
               </div>
 
@@ -627,18 +658,18 @@ function MainApp() {
                 <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>👥</div>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '14px' }}>PARTICIPANTS</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إضافة وتعديل الفرق وشعاراتها من الهاتف</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>إضافة وتعديل الفرق وشعاراتها</div>
                 </div>
               </div>
             </>
           )}
 
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 1 (دور المجموعات والجولات)
-          </div>
-
-          {tournamentSystem !== 'knockout_only' && (
+          {tournamentSystem !== 'knockout_only' && tournamentSystem !== 'ucl_league' && (
             <>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
+                Phase 1 (دور المجموعات والجولات)
+              </div>
+
               <div 
                 onClick={() => setCurrentView('phase1_points')}
                 style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
@@ -663,8 +694,38 @@ function MainApp() {
             </>
           )}
 
+          {tournamentSystem === 'ucl_league' && (
+            <>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '15px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
+                مرحلة الدوري الموحد (League Phase)
+              </div>
+
+              <div 
+                onClick={() => setCurrentView('phase1_points')}
+                style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
+              >
+                <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>⚽</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مباريات الدوري</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>برمجة وإدخال نتائج المباريات</div>
+                </div>
+              </div>
+
+              <div 
+                onClick={() => setCurrentView('phase1_classement')}
+                style={{ background: '#1e293b', padding: '15px 20px', borderRadius: '10px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #334155' }}
+              >
+                <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>📊</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>جدول الترتيب الموحد</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>ترتيب جميع الفرق في جدول واحد لتأهل الأوائل</div>
+                </div>
+              </div>
+            </>
+          )}
+
           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', margin: '20px 0 10px 0', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>
-            Phase 2 (الأدوار الإقصائية والقرعة)
+            {tournamentSystem === 'knockout_only' ? 'مباريات البطولة الإقصائية' : 'Phase 2 (الأدوار الإقصائية والقرعة)'}
           </div>
 
           <div 
@@ -674,7 +735,7 @@ function MainApp() {
             <div style={{ background: '#0f172a', color: '#38bdf8', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold' }}>03</div>
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '14px' }}>مسار البطولة (Quarts, Demis, Finale)</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>توليد وترحيل الفرق أوتوماتيكياً بين الأدوار الإقصائية</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>مباريات خروج المغلوب بنظام (ذهاب وإياب أو مباراة واحدة) وترحيل الفائزين أوتوماتيكياً</div>
             </div>
           </div>
 
@@ -704,9 +765,9 @@ function MainApp() {
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
               >
                 <option value="groups_knockout">دور المجموعات ثم أدوار إقصائية</option>
+                <option value="ucl_league">نظام دوري أبطال أوروبا الجديد (دوري موحد + إقصائيات)</option>
                 <option value="league">دوري عادي (مجموعات فقط)</option>
-                <option value="league_knockout">دوري ثم أدوار إقصائية</option>
-                <option value="knockout_only">أدوار إقصائية فقط</option>
+                <option value="knockout_only">أدوار إقصائية فقط (بدون مجموعات)</option>
               </select>
             </div>
 
@@ -723,7 +784,7 @@ function MainApp() {
             </div>
 
             <div style={{ borderTop: '1px solid #334155', paddingTop: '15px', marginTop: '15px' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر (تحديث عام لجميع المستخدمين)</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#34d399' }}>تغيير كلمات السر (تحديث عام للجميع)</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <input type="password" placeholder="مرور المشرف الجديد" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
               </div>
@@ -756,7 +817,7 @@ function MainApp() {
               if (!newTeamName.trim()) return;
               await addDoc(collection(db, "teams"), { 
                 name: newTeamName, 
-                group: newTeamGroup, 
+                group: (tournamentSystem === 'knockout_only' || tournamentSystem === 'ucl_league') ? 'عام' : newTeamGroup, 
                 logo: newTeamLogo || 'https://via.placeholder.com/40', 
                 p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0 
               });
@@ -766,9 +827,11 @@ function MainApp() {
             }} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <input type="text" placeholder="اسم الفريق..." value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} style={{ flex: 2, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
-                <select value={newTeamGroup} onChange={(e) => setNewTeamGroup(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}>
-                  {groupNames.slice(0, 4).map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
+                {tournamentSystem !== 'knockout_only' && tournamentSystem !== 'ucl_league' && (
+                  <select value={newTeamGroup} onChange={(e) => setNewTeamGroup(e.target.value)} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}>
+                    {groupNames.slice(0, 4).map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '5px' }}>اختر شعار الفريق من الهاتف:</label>
@@ -781,7 +844,7 @@ function MainApp() {
                 <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #334155', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #334155' }} />
-                    <span style={{ fontWeight: 'bold' }}>{t.name} <span style={{ fontSize: '11px', color: '#94a3b8' }}>({t.group})</span></span>
+                    <span style={{ fontWeight: 'bold' }}>{t.name} {tournamentSystem !== 'knockout_only' && tournamentSystem !== 'ucl_league' && <span style={{ fontSize: '11px', color: '#94a3b8' }}>({t.group})</span>}</span>
                   </div>
                   <button onClick={async () => { await deleteDoc(doc(db, "teams", t.id)); await recalculateAllStats(); fetchData(); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer' }}>حذف</button>
                 </div>
@@ -791,46 +854,48 @@ function MainApp() {
         </div>
       )}
 
-      {currentView === 'phase1_points' && (
+      {currentView === 'phase1_points' && tournamentSystem !== 'knockout_only' && (
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', background: '#1e293b', borderBottom: '1px solid #334155' }}>
-            {['Journée 1', 'Journée 2', 'Journée 3'].map((j) => (
-              <button 
-                key={j}
-                onClick={() => setPhase1Tab(j)}
-                style={{ flex: 1, background: phase1Tab === j ? '#0284c7' : 'transparent', border: 'none', padding: '12px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                {j}
-              </button>
-            ))}
-          </div>
+          {tournamentSystem !== 'ucl_league' && (
+            <div style={{ display: 'flex', background: '#1e293b', borderBottom: '1px solid #334155' }}>
+              {['Journée 1', 'Journée 2', 'Journée 3'].map((j) => (
+                <button 
+                  key={j}
+                  onClick={() => setPhase1Tab(j)}
+                  style={{ flex: 1, background: phase1Tab === j ? '#0284c7' : 'transparent', border: 'none', padding: '12px', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {j}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{ padding: '15px' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '15px', margin: '10px 0', color: '#38bdf8' }}>مباريات {phase1Tab}</div>
+            <div style={{ fontWeight: 'bold', fontSize: '15px', margin: '10px 0', color: '#38bdf8' }}>{tournamentSystem === 'ucl_league' ? 'مباريات الدوري الموحد' : `مباريات ${phase1Tab}`}</div>
             
             {role === 'admin' && (
               <form onSubmit={handleAddMatch} style={{ background: '#1e293b', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
-                <h3 style={{ fontSize: '13px', color: '#34d399', marginBottom: '10px' }}>➕ برمجة مباراة جديدة في {phase1Tab}</h3>
+                <h3 style={{ fontSize: '13px', color: '#34d399', marginBottom: '10px' }}>➕ برمجة مباراة جديدة</h3>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                   <select value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
-                    <option value="">اختر الفريق المضيف</option>
-                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                    <option value="">الفريق المضيف</option>
+                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                   </select>
                   <select value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} style={{ flex: 1, padding: '8px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }}>
-                    <option value="">اختر الفريق الضيف</option>
-                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name} ({t.group})</option>)}
+                    <option value="">الفريق الضيف</option>
+                    {(teams || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                   </select>
                 </div>
-                <button type="submit" style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>إضافة المباراة للجولة</button>
+                <button type="submit" style={{ width: '100%', background: '#0284c7', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>إضافة المباراة</button>
               </form>
             )}
 
-            {(matches || []).filter(m => m && m.journee === phase1Tab).length === 0 ? (
+            {(matches || []).filter(m => tournamentSystem === 'ucl_league' || (m && m.journee === phase1Tab)).length === 0 ? (
               <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                لا توجد مباريات مبرمجة في {phase1Tab} حالياً. قم برمجتها من أعلى.
+                لا توجد مباريات مبرمجة حالياً.
               </div>
             ) : (
-              (matches || []).filter(m => m && m.journee === phase1Tab).map((match) => (
+              (matches || []).filter(m => tournamentSystem === 'ucl_league' || (m && m.journee === phase1Tab)).map((match) => (
                 <div key={match.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #334155', textAlign: 'center' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <span style={{ flex: 1, fontWeight: 'bold' }}>{match.home}</span>
@@ -860,7 +925,7 @@ function MainApp() {
                             }}
                             style={{ background: '#10b981', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
                           >
-                            تعديل وحفظ
+                            حفظ
                           </button>
                           <button 
                             onClick={() => handleDeleteMatch(match.id)}
@@ -873,7 +938,6 @@ function MainApp() {
                     </div>
                     <span style={{ flex: 1, fontWeight: 'bold' }}>{match.away}</span>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{match.status || 'قيد الانتظار'}</div>
                 </div>
               ))
             )}
@@ -881,17 +945,59 @@ function MainApp() {
         </div>
       )}
 
-      {currentView === 'phase1_classement' && (
+      {currentView === 'phase1_classement' && tournamentSystem !== 'knockout_only' && (
         <div style={{ maxWidth: '600px', margin: '20px auto', padding: '0 15px' }}>
           {(teams || []).length === 0 ? (
             <div style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', border: '1px solid #334155' }}>
-              لا توجد فرق مسجلة في البطولة حالياً لعرض الترتيب. قم بإضافة الفرق أولاً من قسم المشاركين.
+              لا توجد فرق مسجلة في البطولة حالياً لعرض الترتيب.
+            </div>
+          ) : tournamentSystem === 'ucl_league' ? (
+            // عرض جدول الترتيب الموحد لنظام دوري الأبطال الجديد
+            <div style={{ background: '#1e293b', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #334155' }}>
+              <h3 style={{ fontSize: '15px', color: '#38bdf8', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>جدول الترتيب الموحد (League Phase)</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ background: '#0f172a', textAlign: 'center' }}>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>الفريق</th>
+                    <th>لعب</th>
+                    <th>الفرق</th>
+                    <th>نقاط</th>
+                    {role === 'admin' && <th>تعديل</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortGroupTeams([...teams]).map((t, index) => {
+                    const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
+                    const isEditing = editingTeamId === t.id;
+                    return (
+                      <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155', background: index < 8 ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>{index + 1}.</span>
+                          <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
+                          {isEditing ? <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '90px', background: '#0f172a', color: '#fff' }} /> : t.name}
+                        </td>
+                        <td>{isEditing ? <input type="number" value={editP} onChange={(e) => setEditP(e.target.value)} style={{ width: '35px', background: '#0f172a', color: '#fff', textAlign: 'center' }} /> : (t.p || 0)}</td>
+                        <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>{goalDiff > 0 ? '+' + goalDiff : goalDiff}</td>
+                        <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{isEditing ? <input type="number" value={editPts} onChange={(e) => setEditPts(e.target.value)} style={{ width: '40px', background: '#0f172a', color: '#fff', textAlign: 'center' }} /> : (t.pts || 0)}</td>
+                        {role === 'admin' && (
+                          <td>
+                            {isEditing ? (
+                              <button onClick={() => saveTeamChanges(t.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px' }}>حفظ</button>
+                            ) : (
+                              <button onClick={() => startEditingTeam(t)} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '11px' }}>تعديل</button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             displayGroups.map(group => {
               const groupTeams = (teams || []).filter(t => t && t.group === group);
               if (groupTeams.length === 0) return null;
-
               const sortedTeams = sortGroupTeams([...groupTeams]);
 
               return (
@@ -910,54 +1016,23 @@ function MainApp() {
                     <tbody>
                       {sortedTeams.map(t => {
                         const goalDiff = (Number(t.gf) || 0) - (Number(t.ga) || 0);
-                        const diffColor = goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff';
                         const isEditing = editingTeamId === t.id;
 
                         return (
                           <tr key={t.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <img src={t.logo || 'https://via.placeholder.com/40'} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
-                              {isEditing ? (
-                                <input 
-                                  type="text" 
-                                  value={editName} 
-                                  onChange={(e) => setEditName(e.target.value)} 
-                                  style={{ width: '90px', background: '#0f172a', color: '#fff', border: '1px solid #38bdf8', padding: '2px' }} 
-                                />
-                              ) : t.name}
+                              {isEditing ? <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '90px', background: '#0f172a', color: '#fff' }} /> : t.name}
                             </td>
-                            <td>
-                              {isEditing ? (
-                                <input 
-                                  type="number" 
-                                  value={editP} 
-                                  onChange={(e) => setEditP(e.target.value)} 
-                                  style={{ width: '35px', background: '#0f172a', color: '#fff', textAlign: 'center' }} 
-                                />
-                              ) : (t.p || 0)}
-                            </td>
-                            <td style={{ color: diffColor }}>
-                              {goalDiff > 0 ? '+' + goalDiff : goalDiff}
-                            </td>
-                            <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>
-                              {isEditing ? (
-                                <input 
-                                  type="number" 
-                                  value={editPts} 
-                                  onChange={(e) => setEditPts(e.target.value)} 
-                                  style={{ width: '40px', background: '#0f172a', color: '#fff', textAlign: 'center' }} 
-                                />
-                              ) : (t.pts || 0)}
-                            </td>
+                            <td>{isEditing ? <input type="number" value={editP} onChange={(e) => setEditP(e.target.value)} style={{ width: '35px', background: '#0f172a', color: '#fff', textAlign: 'center' }} /> : (t.p || 0)}</td>
+                            <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>{goalDiff > 0 ? '+' + goalDiff : goalDiff}</td>
+                            <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{isEditing ? <input type="number" value={editPts} onChange={(e) => setEditPts(e.target.value)} style={{ width: '40px', background: '#0f172a', color: '#fff', textAlign: 'center' }} /> : (t.pts || 0)}</td>
                             {role === 'admin' && (
                               <td>
                                 {isEditing ? (
-                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                    <button onClick={() => saveTeamChanges(t.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>حفظ</button>
-                                    <button onClick={() => setEditingTeamId(null)} style={{ background: '#64748b', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>إلغاء</button>
-                                  </div>
+                                  <button onClick={() => saveTeamChanges(t.id)} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '3px 6px', borderRadius: '4px', fontSize: '11px' }}>حفظ</button>
                                 ) : (
-                                  <button onClick={() => startEditingTeam(t)} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>تعديل</button>
+                                  <button onClick={() => startEditingTeam(t)} style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '11px' }}>تعديل</button>
                                 )}
                               </td>
                             )}
@@ -995,13 +1070,13 @@ function MainApp() {
                     onClick={generateKnockoutStage}
                     style={{ width: '100%', background: '#10b981', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer' }}
                   >
-                    ⚡ توليد مباريات ربع النهائي أوتوماتيكياً (مع أفضل الثوالث)
+                    ⚡ توليد مباريات الأدوار الإقصائية أوتوماتيكياً
                   </button>
                 )}
 
                 {(knockoutMatches || []).filter(m => m && m.phase === 'Quarts de finale').length === 0 ? (
                   <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                    لم يتم توليد مباريات ربع النهائي بعد. اضغط على الزر الأخضر أعلاه (للمشرف) لتوليدها وتوزيع الفرق أوتوماتيكياً.
+                    لم يتم توليد الأدوار الإقصائية بعد. اضغط على الزر الأخضر أعلاه.
                   </div>
                 ) : (
                   (knockoutMatches || []).filter(m => m && m.phase === 'Quarts de finale').map((m) => (
@@ -1020,32 +1095,35 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
                         )}
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input 
-                            type="number" 
-                            defaultValue={m.homeScore ?? ''} 
-                            id={`ko-h-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
-                          />
-                          <span>-</span>
-                          <input 
-                            type="number" 
-                            defaultValue={m.awayScore ?? ''} 
-                            id={`ko-a-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
-                          />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {matchLegs === 'aller_retour' && <span style={{ fontSize: '10px', color: '#38bdf8' }}>الذهاب:</span>}
+                            <input type="number" defaultValue={m.homeScoreAller ?? ''} id={`ko-ha-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                            <span>-</span>
+                            <input type="number" defaultValue={m.awayScoreAller ?? ''} id={`ko-aa-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                          </div>
+
+                          {matchLegs === 'aller_retour' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', color: '#34d399' }}>الإياب:</span>
+                              <input type="number" defaultValue={m.homeScoreRetour ?? ''} id={`ko-hr-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                              <span>-</span>
+                              <input type="number" defaultValue={m.awayScoreRetour ?? ''} id={`ko-ar-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                            </div>
+                          )}
+
                           {role === 'admin' && (
                             <button 
                               onClick={() => {
-                                const h = document.getElementById(`ko-h-${m.id}`).value;
-                                const a = document.getElementById(`ko-a-${m.id}`).value;
-                                updateKnockoutScore(m.id, h, a);
+                                const ha = document.getElementById(`ko-ha-${m.id}`).value;
+                                const aa = document.getElementById(`ko-aa-${m.id}`).value;
+                                const hr = matchLegs === 'aller_retour' ? document.getElementById(`ko-hr-${m.id}`).value : 0;
+                                const ar = matchLegs === 'aller_retour' ? document.getElementById(`ko-ar-${m.id}`).value : 0;
+                                updateKnockoutScore(m.id, ha, aa, hr, ar);
                               }}
-                              style={{ background: '#10b981', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px' }}
+                              style={{ background: '#10b981', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px', marginTop: '4px' }}
                             >
-                              حفظ
+                              حفظ 💾
                             </button>
                           )}
                         </div>
@@ -1063,7 +1141,6 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ ربع نهائي منظم (يتأهل الفائز لنصف النهائي أوتوماتيكياً)</div>
                     </div>
                   ))
                 )}
@@ -1074,7 +1151,7 @@ function MainApp() {
               <>
                 {(knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').length === 0 ? (
                   <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                    لم يتم توليد مباريات نصف النهائي بعد. قم بحفظ نتائج ربع النهائي أولاً.
+                    لم يتم توليد مباريات نصف النهائي بعد. قم بحفظ نتائج الدور السابق أولاً.
                   </div>
                 ) : (
                   (knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').map((m) => (
@@ -1093,32 +1170,35 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.home || 'تحديد لاحقاً'}</span>
                         )}
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input 
-                            type="number" 
-                            defaultValue={m.homeScore ?? ''} 
-                            id={`ko-h-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
-                          />
-                          <span>-</span>
-                          <input 
-                            type="number" 
-                            defaultValue={m.awayScore ?? ''} 
-                            id={`ko-a-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} 
-                          />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {matchLegs === 'aller_retour' && <span style={{ fontSize: '10px', color: '#38bdf8' }}>الذهاب:</span>}
+                            <input type="number" defaultValue={m.homeScoreAller ?? ''} id={`ko-ha-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                            <span>-</span>
+                            <input type="number" defaultValue={m.awayScoreAller ?? ''} id={`ko-aa-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                          </div>
+
+                          {matchLegs === 'aller_retour' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', color: '#34d399' }}>الإياب:</span>
+                              <input type="number" defaultValue={m.homeScoreRetour ?? ''} id={`ko-hr-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                              <span>-</span>
+                              <input type="number" defaultValue={m.awayScoreRetour ?? ''} id={`ko-ar-${m.id}`} disabled={role !== 'admin'} style={{ width: '35px', textAlign: 'center', padding: '4px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }} />
+                            </div>
+                          )}
+
                           {role === 'admin' && (
                             <button 
                               onClick={() => {
-                                const h = document.getElementById(`ko-h-${m.id}`).value;
-                                const a = document.getElementById(`ko-a-${m.id}`).value;
-                                updateKnockoutScore(m.id, h, a);
+                                const ha = document.getElementById(`ko-ha-${m.id}`).value;
+                                const aa = document.getElementById(`ko-aa-${m.id}`).value;
+                                const hr = matchLegs === 'aller_retour' ? document.getElementById(`ko-hr-${m.id}`).value : 0;
+                                const ar = matchLegs === 'aller_retour' ? document.getElementById(`ko-ar-${m.id}`).value : 0;
+                                updateKnockoutScore(m.id, ha, aa, hr, ar);
                               }}
-                              style={{ background: '#10b981', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px' }}
+                              style={{ background: '#10b981', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '11px', marginTop: '4px' }}
                             >
-                              حفظ
+                              حفظ 💾
                             </button>
                           )}
                         </div>
@@ -1136,7 +1216,6 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold' }}>{m.away || 'تحديد لاحقاً'}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#34d399' }}>✨ نصف نهائي منظم (يتأهل الفائز للنهائي أوتوماتيكياً)</div>
                     </div>
                   ))
                 )}
@@ -1152,7 +1231,7 @@ function MainApp() {
                 ) : (
                   (knockoutMatches || []).filter(m => m && m.phase === 'Finale').map((m) => (
                     <div key={m.id} style={{ background: '#1e293b', borderRadius: '10px', padding: '20px', textAlign: 'center', border: '1px solid #334155' }}>
-                      <div style={{ fontSize: '12px', color: '#38bdf8', marginBottom: '10px', fontWeight: 'bold' }}>المباراة النهائية الكبرى</div>
+                      <div style={{ fontSize: '12px', color: '#38bdf8', marginBottom: '10px', fontWeight: 'bold' }}>المباراة النهائية الكبرى 🏆</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
                         {role === 'admin' ? (
                           <select 
@@ -1167,32 +1246,35 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold', fontSize: '15px' }}>{m.home || 'تحديد لاحقاً'}</span>
                         )}
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input 
-                            type="number" 
-                            defaultValue={m.homeScore ?? ''} 
-                            id={`ko-h-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '14px' }} 
-                          />
-                          <span>-</span>
-                          <input 
-                            type="number" 
-                            defaultValue={m.awayScore ?? ''} 
-                            id={`ko-a-${m.id}`} 
-                            disabled={role !== 'admin'}
-                            style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px', fontSize: '14px' }} 
-                          />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {matchLegs === 'aller_retour' && <span style={{ fontSize: '10px', color: '#38bdf8' }}>الذهاب:</span>}
+                            <input type="number" defaultValue={m.homeScoreAller ?? ''} id={`ko-ha-${m.id}`} disabled={role !== 'admin'} style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }} />
+                            <span>-</span>
+                            <input type="number" defaultValue={m.awayScoreAller ?? ''} id={`ko-aa-${m.id}`} disabled={role !== 'admin'} style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }} />
+                          </div>
+
+                          {matchLegs === 'aller_retour' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', color: '#34d399' }}>الإياب:</span>
+                              <input type="number" defaultValue={m.homeScoreRetour ?? ''} id={`ko-hr-${m.id}`} disabled={role !== 'admin'} style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }} />
+                              <span>-</span>
+                              <input type="number" defaultValue={m.awayScoreRetour ?? ''} id={`ko-ar-${m.id}`} disabled={role !== 'admin'} style={{ width: '40px', textAlign: 'center', padding: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', borderRadius: '6px' }} />
+                            </div>
+                          )}
+
                           {role === 'admin' && (
                             <button 
                               onClick={() => {
-                                const h = document.getElementById(`ko-h-${m.id}`).value;
-                                const a = document.getElementById(`ko-a-${m.id}`).value;
-                                updateKnockoutScore(m.id, h, a);
+                                const ha = document.getElementById(`ko-ha-${m.id}`).value;
+                                const aa = document.getElementById(`ko-aa-${m.id}`).value;
+                                const hr = matchLegs === 'aller_retour' ? document.getElementById(`ko-hr-${m.id}`).value : 0;
+                                const ar = matchLegs === 'aller_retour' ? document.getElementById(`ko-ar-${m.id}`).value : 0;
+                                updateKnockoutScore(m.id, ha, aa, hr, ar);
                               }}
-                              style={{ background: '#10b981', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}
+                              style={{ background: '#10b981', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#fff', fontWeight: 'bold', fontSize: '12px', marginTop: '4px' }}
                             >
-                              حفظ
+                              حفظ 💾
                             </button>
                           )}
                         </div>
@@ -1210,7 +1292,6 @@ function MainApp() {
                           <span style={{ flex: 1, fontWeight: 'bold', fontSize: '15px' }}>{m.away || 'تحديد لاحقاً'}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#34d399' }}>🏆 المباراة الختامية للبطولة</div>
                     </div>
                   ))
                 )}
