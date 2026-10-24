@@ -6,6 +6,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc,
+  setDoc,
   writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -397,7 +398,7 @@ function MainApp() {
 
       await batch.commit();
       await fetchData();
-      alert("✨ تم توليد مباريات ربع النهائي ونصف النهائي والنهائي أوتوماتيكياً بنجاح!");
+      alert("✨ تم توليد جميع الأدوار الإقصائية (ربع، نصف، ونهائي) أوتوماتيكياً بنجاح!");
     } catch (err) {
       console.error("خطأ في التوليد:", err);
     }
@@ -413,7 +414,7 @@ function MainApp() {
     }
   };
 
-  // دالة تحديث وحفظ النتيجة في الأدوار الإقصائية مع الترحيل التلقائي للدور الموالي
+  // دالة متطورة لحفظ النتيجة وترحيل الفائز للدور الموالي أوتوماتيكياً
   const updateKnockoutScore = async (matchId, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -435,49 +436,47 @@ function MainApp() {
 
       const winnerOf = (id) => {
         const m = currentKo.find(item => item.id === id);
-        if (!m || m.homeScore === null || m.awayScore === null || m.homeScore === undefined || m.awayScore === undefined) return '';
-        return Number(m.homeScore) >= Number(m.awayScore) ? m.home : m.away;
+        if (!m) return '';
+        const curHs = (m.id === matchId) ? hs : m.homeScore;
+        const curAs = (m.id === matchId) ? as : m.awayScore;
+        if (curHs === null || curAs === null || curHs === undefined || curAs === undefined) return '';
+        return Number(curHs) >= Number(curAs) ? m.home : m.away;
       };
 
-      // إذا تم حفظ نتيجة في ربع النهائي (q1, q2, q3, q4) -> تأهيل الفائزين لنصف النهائي (d1, d2) أوتوماتيكياً
+      // إذا كان التعديل في ربع النهائي (q1, q2, q3, q4) -> ترحيل الفائزين لنصف النهائي (d1, d2)
       if (['q1', 'q2', 'q3', 'q4'].includes(matchId)) {
-        // تحديث محلي مؤقت لمعرفة الفائز فوراً
-        const target = currentKo.find(m => m.id === matchId);
-        if (target) { target.homeScore = hs; target.awayScore = as; }
-
         const q1Win = winnerOf('q1');
         const q2Win = winnerOf('q2');
         const q3Win = winnerOf('q3');
         const q4Win = winnerOf('q4');
 
-        await updateDoc(doc(db, "knockout_matches", 'd1'), { 
+        await setDoc(doc(db, "knockout_matches", 'd1'), { 
           home: q1Win || currentKo.find(m => m.id === 'd1')?.home || '', 
           away: q2Win || currentKo.find(m => m.id === 'd1')?.away || '' 
-        });
-        await updateDoc(doc(db, "knockout_matches", 'd2'), { 
+        }, { merge: true });
+
+        await setDoc(doc(db, "knockout_matches", 'd2'), { 
           home: q3Win || currentKo.find(m => m.id === 'd2')?.home || '', 
           away: q4Win || currentKo.find(m => m.id === 'd2')?.away || '' 
-        });
+        }, { merge: true });
       }
 
-      // إذا تم حفظ نتيجة في نصف النهائي (d1, d2) -> تأهيل الفائزين للنهائي (f1) أوتوماتيكياً
+      // إذا كان التعديل في نصف النهائي (d1, d2) -> ترحيل الفائزين للنهائي (f1)
       if (['d1', 'd2'].includes(matchId)) {
-        const target = currentKo.find(m => m.id === matchId);
-        if (target) { target.homeScore = hs; target.awayScore = as; }
-
         const d1Win = winnerOf('d1');
         const d2Win = winnerOf('d2');
 
-        await updateDoc(doc(db, "knockout_matches", 'f1'), { 
+        await setDoc(doc(db, "knockout_matches", 'f1'), { 
           home: d1Win || currentKo.find(m => m.id === 'f1')?.home || '', 
           away: d2Win || currentKo.find(m => m.id === 'f1')?.away || '' 
-        });
+        }, { merge: true });
       }
 
       await fetchData();
       alert("تم حفظ النتيجة وتأهل الفريق الفائز إلى الدور الموالي أوتوماتيكياً! 🏆");
     } catch (err) {
       console.error("خطأ في حفظ النتيجة:", err);
+      alert("حدث خطأ أثناء حفظ النتيجة.");
     }
   };
 
@@ -1046,7 +1045,7 @@ function MainApp() {
               <>
                 {(knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').length === 0 ? (
                   <div style={{ background: '#1e293b', padding: '20px', borderRadius: '10px', textAlign: 'center', color: '#94a3b8' }}>
-                    لم يتم تفعيل مباريات نصف النهائي بعد. قم بحفظ نتائج ربع النهائي أولاً.
+                    لم يتم توليد مباريات نصف النهائي بعد. قم بحفظ نتائج ربع النهائي أولاً.
                   </div>
                 ) : (
                   (knockoutMatches || []).filter(m => m && m.phase === 'Demi-finales').map((m) => (
