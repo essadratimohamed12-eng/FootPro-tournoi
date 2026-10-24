@@ -208,7 +208,6 @@ export default function App() {
 
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         
-        {/* لوحة تحكم المشرف: زر تغيير كلمة المرور أولاً بوضوح تام */}
         {role === 'admin' && (
           <>
             <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '2px solid #10b981' }}>
@@ -248,7 +247,6 @@ export default function App() {
           </>
         )}
 
-        {/* مسار الأدوار الإقصائية المرئية */}
         <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '40px', border: '1px solid #334155' }}>
           <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px' }}>🌟 مسار الأدوار الإقصائية (Path to Final)</h2>
           {knockoutMatches.length === 0 ? (
@@ -269,7 +267,6 @@ export default function App() {
           )}
         </div>
 
-        {/* جداول دور المجموعات منفصلة */}
         <h2 style={{ marginBottom: '20px' }}>🏆 جداول ترتيب دور المجموعات</h2>
         {groupNames.map((group) => {
           const groupTeams = teams.filter(t => t.group === group);
@@ -333,7 +330,6 @@ export default function App() {
           );
         })}
 
-        {/* قسم المباريات */}
         <h2 style={{ marginTop: '40px', marginBottom: '15px' }}>⚽ المباريات والنتائج</h2>
         {matches.map((match) => (
           <div key={match.id} style={{ background: '#1e293b', padding: '15px', marginBottom: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155' }}>
