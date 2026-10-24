@@ -14,6 +14,11 @@ export default function App() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // إعدادات إنشاء بطولة جديدة
+  const [tournamentName, setTournamentName] = useState('');
+  const [tournamentType, setTournamentType] = useState('world_cup'); 
+  const [matchFormat, setMatchFormat] = useState('home_away'); 
+
   const fetchData = async () => {
     try {
       const teamsSnapshot = await getDocs(collection(db, "teams"));
@@ -52,8 +57,8 @@ export default function App() {
         status: 'انتهت'
       });
 
-      const homeTeamObj = teams.find(t => t.name.trim() === match.home.trim());
-      const awayTeamObj = teams.find(t => t.name.trim() === match.away.trim());
+      const homeTeamObj = teams.find(t => t.id === match.homeId || t.name?.trim() === match.home?.trim());
+      const awayTeamObj = teams.find(t => t.id === match.awayId || t.name?.trim() === match.away?.trim());
 
       if (homeTeamObj && awayTeamObj) {
         let homeWin = hs > as ? 1 : 0;
@@ -62,7 +67,7 @@ export default function App() {
         let homePts = homeWin * 3 + homeDraw * 1;
 
         let awayWin = as > hs ? 1 : 0;
-        let awayDraw = hs === as ? 1 : 0;
+        let awayDraw = as === hs ? 1 : 0;
         let awayLoss = as < hs ? 1 : 0;
         let awayPts = awayWin * 3 + awayDraw * 1;
 
@@ -110,28 +115,82 @@ export default function App() {
     return <div style={{ color: '#fff', textAlign: 'center', marginTop: '50px' }}>جاري تحميل البيانات...</div>;
   }
 
+  const knockoutMatches = matches.filter(m => m.stage && m.stage !== 'مجموعات');
+
   return (
     <div style={{ padding: '20px', color: '#fff', backgroundColor: '#0b0f19', minHeight: '100vh', fontFamily: 'Cairo, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>إدارة بطولات كرة القدم - FootPro</h1>
+      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>إدارة بطولات كرة القدم - FootPro ⚽</h1>
       
-      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <h2>المباريات</h2>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        
+        {/* إعدادات البطولة */}
+        <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #334155' }}>
+          <h2 style={{ fontSize: '18px', marginBottom: '15px', color: '#38bdf8' }}>⚙️ إعدادات شكل ونظام البطولة</h2>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>اسم البطولة:</label>
+            <input 
+              type="text" 
+              placeholder="مثال: دوري الأصدقاء 2026" 
+              value={tournamentName}
+              onChange={(e) => setTournamentName(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px' }}>اختر نظام البطولة:</label>
+            <select 
+              value={tournamentType}
+              onChange={(e) => setTournamentType(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+            >
+              <option value="world_cup">شكل كأس العالم (دور المجموعات + أفضل الثوالث + الأدوار الإقصائية)</option>
+              <option value="ucl_new">دوري أبطال أوروبا الجديد (دوري واحد + الإقصائيات)</option>
+              <option value="league">دوري عادي (مجموعات بدون إقصائيات)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* شجرة الأدوار الإقصائية المرئية */}
+        <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '40px', border: '1px solid #334155' }}>
+          <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px' }}>🌟 مسار الأدوار الإقصائية (Path to Final)</h2>
+          {knockoutMatches.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#94a3b8' }}>لا توجد مباريات إقصائية مبرمجة حالياً.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {knockoutMatches.map((km) => (
+                <div key={km.id} style={{ background: '#0f172a', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155' }}>
+                  <span style={{ fontSize: '12px', background: '#0284c7', padding: '3px 8px', borderRadius: '4px' }}>{km.stage || 'إقصائيات'}</span>
+                  <span style={{ width: '25%', textAlign: 'right', fontWeight: 'bold' }}>{km.home}</span>
+                  <div style={{ background: '#1e293b', padding: '5px 15px', borderRadius: '6px', fontWeight: 'bold', color: '#38bdf8' }}>
+                    {km.homeScore ?? '-'} : {km.awayScore ?? '-'}
+                  </div>
+                  <span style={{ width: '25%', textAlign: 'left', fontWeight: 'bold' }}>{km.away}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* المباريات والنتائج */}
+        <h2>المباريات والنتائج العامة</h2>
         {matches.map((match) => (
           <div key={match.id} style={{ background: '#1e293b', padding: '15px', marginBottom: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{match.home}</span>
-            <div>
+            <span style={{ width: '30%', textAlign: 'right' }}>{match.home}</span>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
               <input 
                 type="number" 
                 defaultValue={match.homeScore ?? ''} 
                 id={`h-${match.id}`} 
-                style={{ width: '40px', textAlign: 'center', marginRight: '5px' }} 
+                style={{ width: '40px', textAlign: 'center', marginRight: '5px', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155' }} 
               />
               -
               <input 
                 type="number" 
                 defaultValue={match.awayScore ?? ''} 
                 id={`a-${match.id}`} 
-                style={{ width: '40px', textAlign: 'center', marginLeft: '5px' }} 
+                style={{ width: '40px', textAlign: 'center', marginLeft: '5px', padding: '5px', background: '#0f172a', color: '#fff', border: '1px solid #334155' }} 
               />
               <button 
                 onClick={() => {
@@ -139,12 +198,12 @@ export default function App() {
                   const a = document.getElementById(`a-${match.id}`).value;
                   handleUpdateScore(match, h, a);
                 }}
-                style={{ marginLeft: '10px', background: '#06b6d4', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', color: '#fff' }}
+                style={{ marginLeft: '10px', background: '#06b6d4', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', color: '#fff', fontWeight: 'bold' }}
               >
                 حفظ
               </button>
             </div>
-            <span>{match.away}</span>
+            <span style={{ width: '30%', textAlign: 'left' }}>{match.away}</span>
             <button 
               onClick={() => handleDeleteMatch(match.id)}
               style={{ background: '#ef4444', border: 'none', padding: '5px 8px', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}
@@ -154,7 +213,8 @@ export default function App() {
           </div>
         ))}
 
-        <h2 style={{ marginTop: '40px' }}>ترتيب المجموعات</h2>
+        {/* الترتيب الاحترافي بالمواجهات المباشرة والمعايير */}
+        <h2 style={{ marginTop: '40px' }}>ترتيب المجموعات (مع حساب أفضل الثوالث والمعايير الاحترافية)</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#1e293b', borderRadius: '8px', overflow: 'hidden' }}>
           <thead>
             <tr style={{ background: '#334155', textAlign: 'center' }}>
@@ -165,22 +225,57 @@ export default function App() {
               <th>خسر</th>
               <th>له</th>
               <th>عليه</th>
+              <th>الفرق</th>
               <th>النقاط</th>
             </tr>
           </thead>
           <tbody>
-            {teams.sort((a, b) => (b.pts || 0) - (a.pts || 0)).map((team) => (
-              <tr key={team.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
-                <td style={{ padding: '10px', textAlign: 'right' }}>{team.name}</td>
-                <td>{team.p || 0}</td>
-                <td>{team.w || 0}</td>
-                <td>{team.d || 0}</td>
-                <td>{team.l || 0}</td>
-                <td>{team.gf || 0}</td>
-                <td>{team.ga || 0}</td>
-                <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{team.pts || 0}</td>
-              </tr>
-            ))}
+            {teams.sort((a, b) => {
+              const ptsA = Number(a.pts) || 0;
+              const ptsB = Number(b.pts) || 0;
+              if (ptsB !== ptsA) return ptsB - ptsA;
+
+              const directMatch = matches.find(m => 
+                (m.homeId === a.id && m.awayId === b.id) || 
+                (m.homeId === b.id && m.awayId === a.id) ||
+                (m.home?.trim() === a.name?.trim() && m.away?.trim() === b.name?.trim()) ||
+                (m.home?.trim() === b.name?.trim() && m.away?.trim() === a.name?.trim())
+              );
+
+              if (directMatch && directMatch.status === 'انتهت' && directMatch.homeScore !== undefined && directMatch.awayScore !== undefined) {
+                const isAHome = (directMatch.homeId === a.id || directMatch.home?.trim() === a.name?.trim());
+                const scoreA = isAHome ? Number(directMatch.homeScore) : Number(directMatch.awayScore);
+                const scoreB = isAHome ? Number(directMatch.awayScore) : Number(directMatch.homeScore);
+                if (scoreA !== scoreB) {
+                  return scoreB - scoreA;
+                }
+              }
+
+              const gdA = (Number(a.gf) || 0) - (Number(a.ga) || 0);
+              const gdB = (Number(b.gf) || 0) - (Number(b.ga) || 0);
+              if (gdB !== gdA) return gdB - gdA;
+
+              const gfA = Number(a.gf) || 0;
+              const gfB = Number(b.gf) || 0;
+              return gfB - gfA;
+            }).map((team) => {
+              const goalDiff = (Number(team.gf) || 0) - (Number(team.ga) || 0);
+              return (
+                <tr key={team.id} style={{ textAlign: 'center', borderBottom: '1px solid #334155' }}>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>{team.name}</td>
+                  <td>{team.p || 0}</td>
+                  <td>{team.w || 0}</td>
+                  <td>{team.d || 0}</td>
+                  <td>{team.l || 0}</td>
+                  <td>{team.gf || 0}</td>
+                  <td>{team.ga || 0}</td>
+                  <td style={{ color: goalDiff > 0 ? '#4ade80' : goalDiff < 0 ? '#f87171' : '#fff' }}>
+                    {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
+                  </td>
+                  <td style={{ fontWeight: 'bold', color: '#38bdf8' }}>{team.pts || 0}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
