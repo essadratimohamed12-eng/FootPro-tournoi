@@ -407,14 +407,14 @@ function MainApp() {
   const updateKnockoutTeam = async (matchId, field, value) => {
     try {
       const ref = doc(db, "knockout_matches", matchId);
-      await updateDoc(ref, { [field]: value });
+      await setDoc(ref, { [field]: value }, { merge: true });
       fetchData();
     } catch (err) {
       console.error("خطأ في تحديث الفريق الإقصائي:", err);
     }
   };
 
-  // دالة متطورة لحفظ النتيجة وترحيل الفائز للدور الموالي أوتوماتيكياً
+  // دالة متطورة وآمنة لحفظ النتيجة وترحيل الفائز باستخدام setDoc مع merge
   const updateKnockoutScore = async (matchId, hScore, aScore) => {
     const hs = parseInt(hScore);
     const as = parseInt(aScore);
@@ -426,10 +426,10 @@ function MainApp() {
 
     try {
       const ref = doc(db, "knockout_matches", matchId);
-      await updateDoc(ref, {
+      await setDoc(ref, {
         homeScore: hs,
         awayScore: as
-      });
+      }, { merge: true });
 
       const koSnapshot = await getDocs(collection(db, "knockout_matches"));
       const currentKo = koSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -443,30 +443,42 @@ function MainApp() {
         return Number(curHs) >= Number(curAs) ? m.home : m.away;
       };
 
-      // إذا كان التعديل في ربع النهائي (q1, q2, q3, q4) -> ترحيل الفائزين لنصف النهائي (d1, d2)
+      // إذا كان التعديل في ربع النهائي -> ترحيل الفائزين لنصف النهائي
       if (['q1', 'q2', 'q3', 'q4'].includes(matchId)) {
         const q1Win = winnerOf('q1');
         const q2Win = winnerOf('q2');
         const q3Win = winnerOf('q3');
         const q4Win = winnerOf('q4');
 
-        await setDoc(doc(db, "knockout_matches", 'd1'), { 
+        const d1Ref = doc(db, "knockout_matches", 'd1');
+        await setDoc(d1Ref, { 
+          id: 'd1',
+          phase: 'Demi-finales',
+          index: 0,
           home: q1Win || currentKo.find(m => m.id === 'd1')?.home || '', 
           away: q2Win || currentKo.find(m => m.id === 'd1')?.away || '' 
         }, { merge: true });
 
-        await setDoc(doc(db, "knockout_matches", 'd2'), { 
+        const d2Ref = doc(db, "knockout_matches", 'd2');
+        await setDoc(d2Ref, { 
+          id: 'd2',
+          phase: 'Demi-finales',
+          index: 1,
           home: q3Win || currentKo.find(m => m.id === 'd2')?.home || '', 
           away: q4Win || currentKo.find(m => m.id === 'd2')?.away || '' 
         }, { merge: true });
       }
 
-      // إذا كان التعديل في نصف النهائي (d1, d2) -> ترحيل الفائزين للنهائي (f1)
+      // إذا كان التعديل في نصف النهائي -> ترحيل الفائزين للنهائي
       if (['d1', 'd2'].includes(matchId)) {
         const d1Win = winnerOf('d1');
         const d2Win = winnerOf('d2');
 
-        await setDoc(doc(db, "knockout_matches", 'f1'), { 
+        const f1Ref = doc(db, "knockout_matches", 'f1');
+        await setDoc(f1Ref, { 
+          id: 'f1',
+          phase: 'Finale',
+          index: 0,
           home: d1Win || currentKo.find(m => m.id === 'f1')?.home || '', 
           away: d2Win || currentKo.find(m => m.id === 'f1')?.away || '' 
         }, { merge: true });
@@ -476,7 +488,7 @@ function MainApp() {
       alert("تم حفظ النتيجة وتأهل الفريق الفائز إلى الدور الموالي أوتوماتيكياً! 🏆");
     } catch (err) {
       console.error("خطأ في حفظ النتيجة:", err);
-      alert("حدث خطأ أثناء حفظ النتيجة.");
+      alert("حدث خطأ أثناء حفظ النتيجة: " + err.message);
     }
   };
 
