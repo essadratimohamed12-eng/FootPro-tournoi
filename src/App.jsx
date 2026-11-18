@@ -47,8 +47,13 @@ class ErrorBoundary extends React.Component {
 function MainApp() {
   const [role, setRole] = useState(null);
   
-  const [adminPassword, setAdminPassword] = useState('admin123');
-  const [viewerPassword, setViewerPassword] = useState('viewer123');
+const [adminPassword, setAdminPassword] = useState(() => {
+    return localStorage.getItem('savedAdminPass') || 'admin123';
+  });
+  
+  const [viewerPassword, setViewerPassword] = useState(() => {
+    return localStorage.getItem('savedViewerPass') || 'viewer123';
+  });
   
   const [adminInput, setAdminInput] = useState('');
   const [viewerInput, setViewerInput] = useState('');
